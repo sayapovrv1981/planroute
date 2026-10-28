@@ -9,6 +9,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     (init.headers as Record<string, string>)["Content-Type"] = "application/json";
   }
   const res = await fetch(path, init);
+  if (res.status === 401) window.dispatchEvent(new Event("auth-expired")); // сессия кончилась — на страницу входа
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error((data as { error?: string }).error || `Ошибка ${res.status}`);

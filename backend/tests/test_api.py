@@ -39,15 +39,28 @@ class ApiTest(unittest.TestCase):
             if cls.server.started:
                 break
             time.sleep(0.05)
+        cls.cookie = cls.signup(f"user-{uuid.uuid4().hex[:8]}@example.ru")
+
+    @classmethod
+    def signup(cls, email, password="secret-pass-1", name="Тест"):
+        """Регистрация -> cookie сессии для запросов этого пользователя."""
+        req = urllib.request.Request(f"http://127.0.0.1:{cls.port}/api/auth/register", method="POST",
+                                     data=json.dumps({"email": email, "password": password, "name": name}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as r:
+            return r.headers["Set-Cookie"].split(";")[0]
 
     @classmethod
     def tearDownClass(cls):
         cls.server.should_exit = True
         cls.thread.join(timeout=5)
 
-    def call(self, method, path, body=None, headers=None):
+    def call(self, method, path, body=None, headers=None, cookie=None):
         data = None
         headers = dict(headers or {})
+        cookie = self.cookie if cookie is None else cookie  # "" — без входа
+        if cookie:
+            headers["Cookie"] = cookie
         if isinstance(body, (dict, list)):
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
@@ -59,7 +72,8 @@ class ApiTest(unittest.TestCase):
                 raw = r.read()
                 return r.status, (json.loads(raw) if r.headers.get_content_type() == "application/json" else raw)
         except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read())
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw.startswith(b"{") else raw)
 
     def multipart(self, fields, file=None):
         boundary = uuid.uuid4().hex
@@ -234,6 +248,54 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(status, 201, trip)
             stay = next(i["place_id"] for d in trip["days"] for i in d["items"] if i.get("stay_role") in ("checkin", "checkin_late"))
             self.assertEqual(opts["recommended"], stay, c)
+
+    def test_accounts_and_ownership(self):
+        # без входа API закрыт: и поездки, и платные подсказки
+        for method, path in (("GET", "/api/trips"), ("GET", "/api/meta"), ("GET", "/api/address/suggest?q=Tverskaya"),
+                             ("POST", "/api/trips")):
+            status, body = self.call(method, path, {} if method == "POST" else None, cookie="")
+            self.assertEqual(status, 401, path)
+            self.assertIn("Войдите", body["error"])
+        self.assertEqual(self.call("GET", "/api/health", cookie="")[0], 200)
+        status, me = self.call("GET", "/api/auth/me")
+        self.assertEqual((status, me["user"]["name"]), (200, "Тест"))
+
+        status, trip = self.call("POST", "/api/trips", {"origin": "Москва", "city": "Санкт-Петербург",
+                                                        "start_date": "2026-11-03", "end_date": "2026-11-04"})
+        self.assertEqual(status, 201)
+        tid = trip["id"]
+        status, mine = self.call("GET", "/api/trips")
+        self.assertIn(tid, [t["id"] for t in mine["trips"]])
+        self.assertTrue(next(t for t in mine["trips"] if t["id"] == tid)["title"].startswith("Санкт-Петербург"))
+
+        # чужой: не видит, не меняет, не удаляет, файлов не получает
+        other = self.signup(f"other-{uuid.uuid4().hex[:8]}@example.ru")
+        item = trip["days"][0]["items"][0]["id"]
+        for method, path, body in (("GET", f"/api/trips/{tid}", None), ("DELETE", f"/api/trips/{tid}", None),
+                                   ("PATCH", f"/api/trips/{tid}/items/{item}", {"duration": 60}),
+                                   ("GET", f"/api/trips/{tid}/files/x.pdf", None)):
+            self.assertEqual(self.call(method, path, body, cookie=other)[0], 404, path)
+        self.assertNotIn(tid, [t["id"] for t in self.call("GET", "/api/trips", cookie=other)[1]["trips"]])
+
+        # вход, неверный пароль, выход
+        email = f"third-{uuid.uuid4().hex[:8]}@example.ru"
+        self.signup(email)
+        self.assertEqual(self.call("POST", "/api/auth/login", {"email": email, "password": "wrong-pass"}, cookie="")[0], 401)
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/auth/login", method="POST",
+                                     data=json.dumps({"email": email, "password": "secret-pass-1"}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as r:
+            set_cookie = r.headers["Set-Cookie"]
+        self.assertIn("HttpOnly", set_cookie)
+        self.assertIn("SameSite=lax", set_cookie)
+        third = set_cookie.split(";")[0]
+        self.assertEqual(self.call("GET", "/api/trips", cookie=third)[0], 200)
+        self.call("POST", "/api/auth/logout", {}, cookie=third)
+        self.assertEqual(self.call("GET", "/api/trips", cookie=third)[0], 401)
+
+        # удалить свою
+        self.assertEqual(self.call("DELETE", f"/api/trips/{tid}")[0], 200)
+        self.assertEqual(self.call("GET", f"/api/trips/{tid}")[0], 404)
 
     def test_errors(self):
         status, body = self.call("POST", "/api/trips", {"city": "Урюпинск"})

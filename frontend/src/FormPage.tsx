@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, dateLabel, plural, rub } from "./api";
 import { AddressInput } from "./AddressInput";
-import { Logo, navigate } from "./nav";
+import { Logo, navigate, UserMenu } from "./nav";
 import { AltList, OwnPhoto, Photo, StayImport } from "./Picks";
 import type { Alternative, Meta, TripInput } from "./types";
 
@@ -248,6 +248,9 @@ export function FormPage() {
       <header className="top">
         <div className="wrap top-bar">
           <Logo />
+          <nav className="top-nav" aria-label="Основное меню">
+            <UserMenu />
+          </nav>
         </div>
         <div className="wrap hero">
           <div className="eyebrow">Планировщик самостоятельных поездок</div>

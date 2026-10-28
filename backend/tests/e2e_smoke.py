@@ -3,19 +3,44 @@
 Форма -> маршрут -> длительность, замена, «ещё», удаление, добавление -> документ с двумя файлами
 и проверкой даты -> «К пункту» -> возврат к вводным -> телефон.
 
-Запуск (сервер должен работать на :8000):
-    python tests/e2e_smoke.py [папка_для_скриншотов]
+Запуск: python tests/e2e_smoke.py [папка_для_скриншотов]
+Сервер поднимается свой — на свободном порту, с пустой временной базой и без платных ключей (YandexGPT, Vision,
+Трипстер): живые поездки на :8000 и первый аккаунт не трогаем, запросы к платным API не тратим.
 """
 import base64
 import json
+import os
 import re
+import socket
 import sys
 import tempfile
+import threading
+import time
+import uuid
 from pathlib import Path
 
-from playwright.sync_api import expect, sync_playwright
+os.environ["SH_DATA_DIR"] = tempfile.mkdtemp(prefix="sh-e2e-")
+for _k in ("YANDEX_GPT_API_KEY", "YANDEX_VISION_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+           "TRIPSTER_PARTNER", "TRIPSTER_SECRET"):
+    os.environ[_k] = ""  # backend/.env не перекрывает заданное
 
-BASE = "http://127.0.0.1:8000"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import uvicorn  # noqa: E402
+from playwright.sync_api import expect, sync_playwright  # noqa: E402
+
+from app.main import app  # noqa: E402
+
+_sock = socket.socket()
+_sock.bind(("127.0.0.1", 0))
+PORT = _sock.getsockname()[1]
+_sock.close()
+_server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning"))
+threading.Thread(target=_server.run, daemon=True).start()
+for _ in range(200):
+    if _server.started:
+        break
+    time.sleep(0.05)
+BASE = f"http://127.0.0.1:{PORT}"
 out = Path(sys.argv[1] if len(sys.argv) > 1 else "e2e-shots")
 out.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
@@ -48,8 +73,20 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     setup(page)
 
-    # --- форма
+    # --- без входа — страница входа; регистрация открывает форму
     page.goto(BASE + "/")
+    expect(page.get_by_role("heading", name="Вход")).to_be_visible()
+    page.get_by_role("tab", name="Регистрация").click()
+    page.get_by_label("Как к вам обращаться").fill("Тест")
+    page.get_by_label("Почта").fill(f"e2e-{uuid.uuid4().hex[:8]}@example.ru")
+    page.get_by_label("Пароль").fill("коротк")
+    page.get_by_role("button", name="Создать аккаунт").click()
+    expect(page.get_by_role("heading", name="Регистрация")).to_be_visible()  # короткий пароль не пропустит браузер
+    page.get_by_label("Пароль").fill("secret-pass-1")
+    page.get_by_role("button", name="Создать аккаунт").click()
+
+    # --- форма
+    expect(page.get_by_role("button", name="Выйти")).to_be_visible()
     expect(page.get_by_role("heading", name="Откуда и куда")).to_be_visible()
     # подсказки адресов: ответ сервера подменяем, чтобы не зависеть от внешнего сервиса
     def fake_schedule(route):
@@ -310,7 +347,9 @@ with sync_playwright() as p:
     expect(page.locator(".tl-card").filter(has=show).first.get_by_role("link", name=re.compile("Афиша|Купить"))).to_have_count(0)
 
     # --- телефон
-    phone = browser.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True)
+    phone_ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True)
+    phone_ctx.add_cookies(page.context.cookies())  # тот же аккаунт на телефоне
+    phone = phone_ctx.new_page()
     setup(phone)
     phone.goto(trip_url)
     expect(phone.get_by_role("heading", name="Выход из дома")).to_be_visible()
@@ -321,7 +360,15 @@ with sync_playwright() as p:
     width = phone.evaluate("document.documentElement.scrollWidth")
     assert width <= 390, f"горизонтальная прокрутка формы на телефоне: {width}px"
     phone.screenshot(path=str(out / "5-form-phone.png"), full_page=True)
+    # --- «Мои поездки»: поездка в списке; выход — снова вход, поездка без входа не открывается
+    page.goto(BASE + "/trips")
+    expect(page.get_by_role("list", name="Мои поездки").get_by_role("listitem")).not_to_have_count(0)
+    page.get_by_role("button", name="Выйти").click()
+    expect(page.get_by_role("heading", name="Вход")).to_be_visible()
+    page.goto(trip_url)
+    expect(page.get_by_role("heading", name="Вход")).to_be_visible()
     browser.close()
+_server.should_exit = True
 
 if errors:
     print("Ошибки в браузере:", *errors, sep="\n  ")

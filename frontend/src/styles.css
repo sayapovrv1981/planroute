@@ -275,7 +275,21 @@ textarea { height: auto; padding: 12px 14px; resize: vertical; }
 .settings-body { display: flex; flex-direction: column; gap: 12px; padding-top: 6px; }
 .back { align-self: flex-start; background: none; border: 0; padding: 6px 0; font-weight: 700; color: var(--accent); cursor: pointer; font-size: 15px; }
 .back:hover { color: var(--accent-dark); }
-.top-nav { display: flex; gap: 20px; flex-wrap: wrap; }
+.top-nav { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+.top-nav .user-name { color: #fff; font-weight: 700; }
+.top-link { background: none; border: 0; padding: 0; color: #c9d2de; font-weight: 600; cursor: pointer; }
+.top-link:hover { color: #fff; }
+.auth-hero { padding-bottom: 70px; }
+.auth-wrap { margin-top: -50px; display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.auth-card { max-width: 460px; }
+.trips-head { justify-content: space-between; align-items: center; }
+.trips-head h2, .card h2 { margin: 0; font-size: 20px; }
+.as-button { display: inline-flex; align-items: center; text-decoration: none; }
+.trip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.trip-list li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: var(--soft); }
+.trip-list a { flex: 1; min-width: 0; color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 2px; }
+.trip-list a:hover b { color: var(--accent); }
+.trip-list span { font-size: 14px; color: var(--muted); }
 .tl-transfer a { margin-left: 10px; font-weight: 700; text-decoration: none; font-size: 13px; }
 .tl-item.focused .tl-card { box-shadow: 0 0 0 3px var(--accent); }
 .tags { align-items: center; }

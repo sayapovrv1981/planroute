@@ -16,10 +16,11 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.middleware import Middleware
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import address, bookings, catalog, planner, schedule, store, sutochno, tripster, wishes_ai, yandexmaps
+from . import address, auth, bookings, catalog, planner, schedule, store, sutochno, tripster, wishes_ai, yandexmaps
 
 
 def _load_env_file() -> None:
@@ -290,13 +291,14 @@ async def create_trip(request: Request) -> JSONResponse:
             raise ValueError("Поездка на один день — жильё не нужно, уберите ссылку на бронь")
     except (ValueError, TypeError) as e:
         return err(422, str(e))
-    tid = store.create(trip)
-    if attach_bookings(tid, trip, tickets):
+    uid = request.state.user["id"]
+    tid = store.create(trip, uid)
+    if attach_bookings(tid, trip, tickets, uid):
         store.save(tid, trip)
     return JSONResponse(present(tid, trip), status_code=201)
 
 
-def attach_bookings(tid: str, trip: dict, tickets: list[dict]) -> bool:
+def attach_bookings(tid: str, trip: dict, tickets: list[dict], uid: int) -> bool:
     """Брони из формы — документом «оплачено» к своим пунктам (дорога туда и обратно, заселение, события
     по билетам), с файлом, если его загрузили."""
     items = [it for d in trip["days"] for it in d["items"]]
@@ -319,7 +321,7 @@ def attach_bookings(tid: str, trip: dict, tickets: list[dict]) -> bool:
                 src = store.file_path(tid, adopted[key])
                 name = store.save_file(tid, src.name, src.read_bytes()) if src else None
             else:
-                name = adopted[key] = store.adopt_pending(*key, tid)
+                name = adopted[key] = store.adopt_pending(*key, tid, uid)
         files = [{"name": name, "filename": str(f.get("filename") or name)}] if name else []
         if name and not f.get("trip"):  # в вводных — ссылка на файл поездки: открыть билет и из «Изменить вводные»
             b["file"] = dict(f, trip=tid, name=name)
@@ -354,7 +356,7 @@ async def parse_bookings(request: Request) -> JSONResponse:
             got = await run_in_threadpool(bookings.parse, text, origin, city)
             saved = None
             if filename and got:
-                name = store.save_file(f"pending-{token}", filename, content)
+                name = store.save_file(store.pending_dir(request.state.user["id"], token), filename, content)
                 saved = {"token": token, "name": name, "filename": filename}
             for b in got:
                 found.append(dict(b, file=saved, source=what))
@@ -368,16 +370,92 @@ async def parse_bookings(request: Request) -> JSONResponse:
     return JSONResponse({"bookings": found, "errors": errors})
 
 
-def load_trip(tid: str) -> dict:
-    trip = store.get(tid)
+def load_trip(request: Request, tid: str) -> dict:
+    """Поездка владельца; чужая — как несуществующая: 404, а не 403, чтобы не подтверждать, что такая есть."""
+    trip = store.get(tid, request.state.user["id"])
     if trip is None:
         raise HTTPException(404, "Поездка не найдена")
     return trip
 
 
+# ------------------------------------------------------------------ аккаунты
+
+def _session_response(data: dict, request: Request, token: str | None, status: int = 200) -> JSONResponse:
+    resp = JSONResponse(data, status_code=status)
+    if token:
+        resp.set_cookie(auth.COOKIE, token, max_age=auth.SESSION_DAYS * 86400, httponly=True, samesite="lax",
+                        secure=request.url.scheme == "https", path="/")
+    else:
+        resp.delete_cookie(auth.COOKIE, path="/")
+    return resp
+
+
+async def _json(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ожидается JSON") from None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Ожидается JSON-объект")
+    return body
+
+
+async def auth_register(request: Request) -> JSONResponse:
+    body = await _json(request)
+    try:
+        user = await run_in_threadpool(auth.register, str(body.get("email") or ""), str(body.get("password") or ""),
+                                       str(body.get("name") or ""))
+    except ValueError as e:
+        return err(422, str(e))
+    return _session_response({"user": user}, request, auth.new_session(user["id"]), 201)
+
+
+async def auth_login(request: Request) -> JSONResponse:
+    body = await _json(request)
+    ip = request.client.host if request.client else ""
+    try:
+        user = await run_in_threadpool(auth.login, str(body.get("email") or ""), str(body.get("password") or ""), ip)
+    except PermissionError as e:
+        return err(429, str(e))
+    except ValueError as e:
+        return err(401, str(e))
+    return _session_response({"user": user}, request, auth.new_session(user["id"]))
+
+
+async def auth_logout(request: Request) -> JSONResponse:
+    auth.end_session(request.cookies.get(auth.COOKIE))
+    return _session_response({"ok": True}, request, None)
+
+
+async def auth_me(request: Request) -> JSONResponse:
+    user = auth.session_user(request.cookies.get(auth.COOKIE))
+    return JSONResponse({"user": user}) if user else err(401, "Войдите в аккаунт")
+
+
+async def auth_password(request: Request) -> JSONResponse:
+    body = await _json(request)
+    uid = request.state.user["id"]
+    try:
+        await run_in_threadpool(auth.change_password, uid, str(body.get("old") or ""), str(body.get("new") or ""))
+    except ValueError as e:
+        return err(422, str(e))
+    # прежние сессии закрыты (выход на других устройствах) — здесь остаёмся в аккаунте
+    return _session_response({"ok": True}, request, auth.new_session(uid))
+
+
+async def list_trips(request: Request) -> JSONResponse:
+    return JSONResponse({"trips": store.list_trips(request.state.user["id"])})
+
+
+async def delete_trip(request: Request) -> JSONResponse:
+    if not store.delete(request.path_params["tid"], request.state.user["id"]):
+        return err(404, "Поездка не найдена")
+    return JSONResponse({"ok": True})
+
+
 async def get_trip(request: Request) -> JSONResponse:
     tid = request.path_params["tid"]
-    return JSONResponse(present(tid, load_trip(tid)))
+    return JSONResponse(present(tid, load_trip(request, tid)))
 
 
 def put_excursion(trip: dict, iid: str, pid: str) -> dict:
@@ -394,7 +472,7 @@ def put_excursion(trip: dict, iid: str, pid: str) -> dict:
 
 async def patch_item(request: Request) -> JSONResponse:
     tid, iid = request.path_params["tid"], request.path_params["iid"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     try:
         body = await request.json()
     except Exception:
@@ -419,7 +497,7 @@ async def patch_item(request: Request) -> JSONResponse:
 async def put_place(request: Request) -> JSONResponse:
     """Своё кафе или ресторан по ссылке с Яндекс Карт — вместо завтрака, обеда или ужина."""
     tid, iid = request.path_params["tid"], request.path_params["iid"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     try:
         body = await request.json()
     except Exception:
@@ -438,7 +516,7 @@ async def put_place(request: Request) -> JSONResponse:
 
 async def attach_doc(request: Request) -> JSONResponse:
     tid, iid = request.path_params["tid"], request.path_params["iid"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     form = await request.form()
     doc = {k: form.get(k) for k in ("title", "sum", "paid", "date", "start", "end")}
     saved: list[dict] = []
@@ -462,7 +540,7 @@ async def attach_doc(request: Request) -> JSONResponse:
 
 async def delete_doc_file(request: Request) -> JSONResponse:
     tid, iid, name = request.path_params["tid"], request.path_params["iid"], request.path_params["name"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     try:
         trip = planner.remove_doc_file(trip, iid, name)
     except KeyError:
@@ -474,7 +552,7 @@ async def delete_doc_file(request: Request) -> JSONResponse:
 
 async def delete_item(request: Request) -> JSONResponse:
     tid, iid = request.path_params["tid"], request.path_params["iid"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     try:
         trip, old = planner.delete_item(trip, iid)
     except KeyError:
@@ -489,7 +567,7 @@ async def delete_item(request: Request) -> JSONResponse:
 
 async def suggest(request: Request) -> JSONResponse:
     tid, day = request.path_params["tid"], request.path_params["day"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     if not 0 <= day < len(trip["days"]):
         return err(404, "Нет такого дня")
     after = request.query_params.get("after") or None
@@ -511,7 +589,7 @@ async def suggest(request: Request) -> JSONResponse:
 
 async def add_item(request: Request) -> JSONResponse:
     tid, day = request.path_params["tid"], request.path_params["day"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     try:
         body = await request.json()
     except Exception:
@@ -527,7 +605,7 @@ async def add_item(request: Request) -> JSONResponse:
 
 async def detach_doc(request: Request) -> JSONResponse:
     tid, iid = request.path_params["tid"], request.path_params["iid"]
-    trip = load_trip(tid)
+    trip = load_trip(request, tid)
     try:
         trip, old = planner.detach_doc(trip, iid)
     except KeyError:
@@ -539,7 +617,8 @@ async def detach_doc(request: Request) -> JSONResponse:
 
 
 async def get_file(request: Request) -> Response:
-    p = store.file_path(request.path_params["tid"], request.path_params["name"])
+    tid = request.path_params["tid"]
+    p = store.file_path(tid, request.path_params["name"]) if store.owns(tid, request.state.user["id"]) else None
     if not p:
         raise HTTPException(404, "Файл не найден")
     return FileResponse(p, filename=request.query_params.get("filename") or None,
@@ -547,9 +626,10 @@ async def get_file(request: Request) -> Response:
 
 
 async def get_pending_file(request: Request) -> Response:
-    """Билет, загруженный в форме, пока поездка не создана (папка pending-<token>)."""
+    """Билет, загруженный в форме, пока поездка не создана."""
     token = request.path_params["token"]
-    p = store.file_path(f"pending-{token}", request.path_params["name"]) if re.fullmatch(r"[0-9a-f]{12,32}", token) else None
+    folder = store.pending_dir(request.state.user["id"], token)  # только свои: папка с номером пользователя
+    p = store.file_path(folder, request.path_params["name"]) if folder else None
     if not p:
         raise HTTPException(404, "Файл не найден — загрузите билет ещё раз")
     return FileResponse(p, filename=request.query_params.get("filename") or None,
@@ -578,6 +658,11 @@ async def spa(request: Request) -> Response:
 
 routes = [
     Route("/api/health", health),
+    Route("/api/auth/register", auth_register, methods=["POST"]),
+    Route("/api/auth/login", auth_login, methods=["POST"]),
+    Route("/api/auth/logout", auth_logout, methods=["POST"]),
+    Route("/api/auth/me", auth_me),
+    Route("/api/auth/password", auth_password, methods=["POST"]),
     Route("/api/meta", meta),
     Route("/api/stays", stays),
     Route("/api/stays/preview", stay_preview, methods=["POST"]),
@@ -586,7 +671,9 @@ routes = [
     Route("/api/address/suggest", address_suggest),
     Route("/api/schedule", schedule_search),
     Route("/api/trips", create_trip, methods=["POST"]),
+    Route("/api/trips", list_trips),
     Route("/api/trips/{tid}", get_trip),
+    Route("/api/trips/{tid}", delete_trip, methods=["DELETE"]),
     Route("/api/trips/{tid}/items/{iid}", patch_item, methods=["PATCH"]),
     Route("/api/trips/{tid}/items/{iid}", delete_item, methods=["DELETE"]),
     Route("/api/trips/{tid}/items/{iid}/doc/files/{name}", delete_doc_file, methods=["DELETE"]),
@@ -606,4 +693,26 @@ async def lifespan(_app: Starlette):
     yield
 
 
-app = Starlette(routes=routes, exception_handlers={HTTPException: http_error}, lifespan=lifespan)
+PUBLIC_API = {"/api/health", "/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/me"}
+
+
+class RequireLogin:
+    """Весь /api/ — только с входом в аккаунт (кроме входа и регистрации): поездки личные, а подсказки адресов,
+    расписания и распознавание билетов тратят платные ключи. Пользователь — в request.state.user."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith("/api/") and scope["path"] not in PUBLIC_API:
+            request = Request(scope)
+            user = auth.session_user(request.cookies.get(auth.COOKIE))
+            if not user:
+                await err(401, "Войдите в аккаунт")(scope, receive, send)
+                return
+            scope.setdefault("state", {})["user"] = user
+        await self.app(scope, receive, send)
+
+
+app = Starlette(routes=routes, exception_handlers={HTTPException: http_error}, lifespan=lifespan,
+                middleware=[Middleware(RequireLogin)])

@@ -1,12 +1,14 @@
-"""Хранилище поездок и файлов документов.
+"""Хранилище поездок, пользователей и файлов документов.
 
 Прототип: SQLite + папка uploads/. В MVP — PostgreSQL + S3-хранилище в России.
+У поездки есть владелец (user_id): чужую поездку не отдаём, даже по ссылке.
 """
 from __future__ import annotations
 
 import json
-import re
 import os
+import re
+import shutil
 import sqlite3
 import threading
 import uuid
@@ -24,24 +26,59 @@ def _db():
     con = sqlite3.connect(BASE / "trips.sqlite3")
     try:
         con.execute("create table if not exists trips (id text primary key, data text not null, created text, updated text)")
+        if "user_id" not in {r[1] for r in con.execute("pragma table_info(trips)")}:
+            con.execute("alter table trips add column user_id integer")  # поездки до аккаунтов — без владельца
+        con.execute("create table if not exists users (id integer primary key, email text unique not null, "
+                    "name text not null, password text not null, created text not null)")
+        con.execute("create table if not exists sessions (token text primary key, user_id integer not null, "
+                    "created text not null, expires text not null)")
         yield con
         con.commit()
     finally:
         con.close()
 
 
-def create(trip: dict) -> str:
+def create(trip: dict, user_id: int) -> str:
     tid = uuid.uuid4().hex[:12]
     now = datetime.now(timezone.utc).isoformat()
     with _lock, _db() as con:
-        con.execute("insert into trips values (?, ?, ?, ?)", (tid, json.dumps(trip, ensure_ascii=False), now, now))
+        con.execute("insert into trips (id, data, created, updated, user_id) values (?, ?, ?, ?, ?)",
+                    (tid, json.dumps(trip, ensure_ascii=False), now, now, user_id))
     return tid
 
 
-def get(tid: str) -> dict | None:
+def get(tid: str, user_id: int) -> dict | None:
+    """Поездка владельца; чужая или несуществующая — None (для пользователя это одно и то же: «не найдена»)."""
     with _lock, _db() as con:
-        row = con.execute("select data from trips where id = ?", (tid,)).fetchone()
+        row = con.execute("select data from trips where id = ? and user_id = ?", (tid, user_id)).fetchone()
     return json.loads(row[0]) if row else None
+
+
+def owns(tid: str, user_id: int) -> bool:
+    with _lock, _db() as con:
+        return con.execute("select 1 from trips where id = ? and user_id = ?", (tid, user_id)).fetchone() is not None
+
+
+def list_trips(user_id: int) -> list[dict]:
+    """Поездки пользователя для «Мои поездки»: свежие сверху, без программы целиком."""
+    with _lock, _db() as con:
+        rows = con.execute("select id, data, created, updated from trips where user_id = ? order by updated desc",
+                           (user_id,)).fetchall()
+    out = []
+    for tid, data, created, updated in rows:
+        t = json.loads(data)
+        s, i = t.get("summary", {}), t.get("input", {})
+        out.append({"id": tid, "title": s.get("title", ""), "city": s.get("city", ""), "dates": s.get("dates", ""),
+                    "people": s.get("people", ""), "start_date": i.get("start_date"), "created": created, "updated": updated})
+    return out
+
+
+def delete(tid: str, user_id: int) -> bool:
+    with _lock, _db() as con:
+        gone = con.execute("delete from trips where id = ? and user_id = ?", (tid, user_id)).rowcount > 0
+    if gone:
+        shutil.rmtree(BASE / "uploads" / tid, ignore_errors=True)
+    return gone
 
 
 def save(tid: str, trip: dict) -> None:
@@ -78,11 +115,17 @@ def file_path(tid: str, name: str) -> Path | None:
     return p if p.is_file() else None
 
 
-def adopt_pending(token: str, name: str, tid: str) -> str | None:
-    """Файл, загруженный в форме до создания поездки (папка pending-<token>), — в файлы поездки."""
-    if not re.fullmatch(r"[0-9a-f]{12,32}", token or ""):
+def pending_dir(user_id: int, token: str) -> str | None:
+    """Папка билетов, загруженных в форме до создания поездки: своя у каждого пользователя."""
+    return f"pending-{int(user_id)}-{token}" if re.fullmatch(r"[0-9a-f]{12,32}", token or "") else None
+
+
+def adopt_pending(token: str, name: str, tid: str, user_id: int) -> str | None:
+    """Файл, загруженный в форме до создания поездки, — в файлы поездки."""
+    folder = pending_dir(user_id, token)
+    if not folder:
         return None
-    src = file_path(f"pending-{token}", name)
+    src = file_path(folder, name)
     if not src:
         return None
     src.rename(files_dir(tid) / name)

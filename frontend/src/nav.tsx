@@ -1,3 +1,5 @@
+import { createContext, useContext } from "react";
+
 export function navigate(path: string) {
   window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -22,5 +24,52 @@ export function Logo() {
       </svg>
       Своим ходом
     </a>
+  );
+}
+
+
+export type User = { id: number; email: string; name: string };
+
+/** Кто вошёл: null — никто (показываем вход). setUser(null) после выхода или истёкшей сессии. */
+export const UserContext = createContext<{ user: User | null; setUser: (u: User | null) => void }>({
+  user: null,
+  setUser: () => undefined,
+});
+
+/** Пункты шапки для вошедшего: «Мои поездки», имя, «Выйти». Ставится внутрь <nav className="top-nav">. */
+export function UserMenu() {
+  const { user, setUser } = useContext(UserContext);
+  if (!user) return null;
+  return (
+    <>
+      <a
+        href="/trips"
+        onClick={(e) => {
+          e.preventDefault();
+          navigate("/trips");
+        }}
+      >
+        Мои поездки
+      </a>
+      <span className="user-name" title={user.email}>
+        {user.name}
+      </span>
+      <button
+        type="button"
+        className="top-link"
+        onClick={async () => {
+          await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+          try {
+            localStorage.removeItem("svoim-hodom:form-draft"); // черновик формы — не для следующего на этом компьютере
+          } catch {
+            /* хранилище недоступно */
+          }
+          setUser(null);
+          navigate("/login");
+        }}
+      >
+        Выйти
+      </button>
+    </>
   );
 }
