@@ -1,0 +1,144 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
+    "python.testing.unittestEnabled": true,
+    "python.testing.pytestEnabled": false,
+    "python.testing.cwd": "${workspaceFolder}/backend",
+    "python.testing.unittestArgs": [
+      "-v",
+      "-s",
+      "./tests",
+      "-p",
+      "test_*.py"
+    ],
+    "python.analysis.extraPaths": [
+      "${workspaceFolder}/backend"
+    ],
+    "[python]": {
+      "editor.defaultFormatter": "charliermarsh.ruff",
+      "editor.formatOnSave": true
+    },
+    "[typescriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[css]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "prettier.printWidth": 120,
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.venv": true,
+      "frontend/node_modules": true
+    },
+    "cSpell.language": "en,ru"
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-python.debugpy",
+      "charliermarsh.ruff",
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "humao.rest-client",
+      "qwtel.sqlite-viewer",
+      "ms-playwright.playwright",
+      "eamodio.gitlens",
+      "streetsidesoftware.code-spell-checker-russian"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Запустить приложение (сервер :8000)",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+          "app.main:app",
+          "--reload",
+          "--port",
+          "8000"
+        ],
+        "cwd": "${workspaceFolder}/backend",
+        "python": "${workspaceFolder}/backend/.venv/bin/python",
+        "preLaunchTask": "Фронтенд: сборка",
+        "jinja": false,
+        "justMyCode": true
+      },
+      {
+        "name": "Тесты бэкенда",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "unittest",
+        "args": [
+          "discover",
+          "-s",
+          "tests",
+          "-v"
+        ],
+        "cwd": "${workspaceFolder}/backend",
+        "python": "${workspaceFolder}/backend/.venv/bin/python"
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Установка: всё",
+        "type": "shell",
+        "command": "bash scripts/setup.sh",
+        "problemMatcher": []
+      },
+      {
+        "label": "Фронтенд: сборка",
+        "type": "shell",
+        "command": "npm run build",
+        "options": {
+          "cwd": "${workspaceFolder}/frontend"
+        },
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "Фронтенд: пересборка при изменениях",
+        "type": "shell",
+        "command": "npm run watch",
+        "options": {
+          "cwd": "${workspaceFolder}/frontend"
+        },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Бэкенд: тесты",
+        "type": "shell",
+        "command": ".venv/bin/python -m unittest discover -s tests -v",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "Проверка в браузере (Playwright)",
+        "type": "shell",
+        "command": ".venv/bin/python tests/e2e_smoke.py ../e2e-shots",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "problemMatcher": []
+      }
+    ]
+  }
+}

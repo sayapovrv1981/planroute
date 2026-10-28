@@ -1,0 +1,28 @@
+### Запросы к API — открываются расширением REST Client (кнопка «Send Request»)
+@base = http://localhost:8000
+
+### Справочники формы
+GET {{base}}/api/meta
+
+### Построить поездку (пример из ТЗ)
+# @name trip
+POST {{base}}/api/trips
+Content-Type: application/json
+
+{
+  "origin": "Москва",
+  "city": "Санкт-Петербург",
+  "start_date": "2026-10-27",
+  "start_time": "09:00",
+  "return_time": "18:00",
+  "days": 3,
+  "transport": "auto",
+  "adults": 2,
+  "kids_ages": [],
+  "budget": 100000,
+  "pace": "balanced",
+  "wishes": "хотелось бы посетить театр недорого"
+}
+
+### Открыть поездку
+GET {{base}}/api/trips/{{trip.response.body.id}}

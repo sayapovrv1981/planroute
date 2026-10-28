@@ -1,0 +1,1183 @@
+{
+ "city": "Санкт-Петербург",
+ "aliases": [
+  "СПб",
+  "Петербург",
+  "Питер"
+ ],
+ "center": [
+  59.9386,
+  30.3141
+ ],
+ "data_status": "draft",
+ "note": "Черновой каталог для прототипа. Координаты, часы работы и цены приблизительные и должны быть проверены или заменены данными API поиска по организациям Яндекса. Рейтинги не заполнены намеренно — они придут из API.",
+ "arrival_points": {
+  "train_moscow": {
+   "name": "Московский вокзал",
+   "lat": 59.9298,
+   "lon": 30.3622
+  },
+  "airport": {
+   "name": "Аэропорт Пулково",
+   "lat": 59.8003,
+   "lon": 30.2625
+  },
+  "bus": {
+   "name": "Автовокзал",
+   "lat": 59.9097,
+   "lon": 30.354
+  }
+ },
+ "places": [
+  {
+   "id": "hermitage",
+   "name": "Государственный Эрмитаж",
+   "category": "museum",
+   "lat": 59.9398,
+   "lon": 30.3146,
+   "duration": 150,
+   "price_adult": 500,
+   "price_child": 0,
+   "kids": true,
+   "priority": 5,
+   "url": "https://www.hermitagemuseum.org",
+   "hours": {
+    "open": "10:30",
+    "close": "18:00",
+    "closed": [
+     0
+    ],
+    "late": {
+     "2": "21:00",
+     "4": "21:00"
+    }
+   },
+   "note": "Зимний дворец; билеты лучше купить онлайн",
+   "wiki": "Государственный Эрмитаж",
+   "tags": [
+    "art",
+    "history",
+    "architecture"
+   ]
+  },
+  {
+   "id": "rusmuseum",
+   "name": "Русский музей",
+   "category": "museum",
+   "lat": 59.9386,
+   "lon": 30.3326,
+   "duration": 120,
+   "price_adult": 500,
+   "price_child": 0,
+   "kids": true,
+   "priority": 4,
+   "url": "https://rusmuseum.ru",
+   "hours": {
+    "open": "10:00",
+    "close": "18:00",
+    "closed": [
+     1
+    ]
+   },
+   "note": "Михайловский дворец",
+   "wiki": "Государственный Русский музей",
+   "tags": [
+    "art"
+   ]
+  },
+  {
+   "id": "isaac",
+   "name": "Исаакиевский собор и колоннада",
+   "category": "museum",
+   "lat": 59.9341,
+   "lon": 30.3062,
+   "duration": 75,
+   "price_adult": 500,
+   "price_child": 0,
+   "kids": true,
+   "priority": 5,
+   "url": "https://cathedral.ru",
+   "hours": {
+    "open": "10:30",
+    "close": "18:00",
+    "closed": []
+   },
+   "note": "Вид на центр с колоннады",
+   "wiki": "Исаакиевский собор",
+   "tags": [
+    "architecture",
+    "history",
+    "views"
+   ]
+  },
+  {
+   "id": "spas",
+   "name": "Спас на Крови",
+   "category": "museum",
+   "lat": 59.94,
+   "lon": 30.3289,
+   "duration": 45,
+   "price_adult": 500,
+   "price_child": 0,
+   "kids": true,
+   "priority": 5,
+   "url": "https://cathedral.ru",
+   "hours": {
+    "open": "10:30",
+    "close": "18:00",
+    "closed": []
+   },
+   "note": "Мозаики XIX века",
+   "wiki": "Храм Спаса на Крови",
+   "tags": [
+    "architecture",
+    "art"
+   ]
+  },
+  {
+   "id": "petropavl",
+   "name": "Петропавловская крепость",
+   "category": "museum",
+   "lat": 59.95,
+   "lon": 30.3166,
+   "duration": 120,
+   "price_adult": 750,
+   "price_child": 0,
+   "kids": true,
+   "priority": 5,
+   "url": "https://www.spbmuseum.ru",
+   "hours": {
+    "open": "10:00",
+    "close": "18:00",
+    "closed": []
+   },
+   "note": "Собор, бастионы и пляж у стен",
+   "wiki": "Петропавловская крепость",
+   "tags": [
+    "history",
+    "architecture"
+   ]
+  },
+  {
+   "id": "kunstkamera",
+   "name": "Кунсткамера",
+   "category": "museum",
+   "lat": 59.9415,
+   "lon": 30.3046,
+   "duration": 90,
+   "price_adult": 500,
+   "price_child": 0,
+   "kids": true,
+   "priority": 3,
+   "url": "https://www.kunstkamera.ru",
+   "hours": {
+    "open": "11:00",
+    "close": "19:00",
+    "closed": [
+     0
+    ]
+   },
+   "note": "Первый музей России",
+   "wiki": "Кунсткамера",
+   "tags": [
+    "history",
+    "science"
+   ]
+  },
+  {
+   "id": "faberge",
+   "name": "Музей Фаберже",
+   "category": "museum",
+   "lat": 59.9349,
+   "lon": 30.3433,
+   "duration": 90,
+   "price_adult": 650,
+   "price_child": 0,
+   "kids": false,
+   "priority": 3,
+   "url": "https://fabergemuseum.ru",
+   "hours": {
+    "open": "10:00",
+    "close": "20:30",
+    "closed": []
+   },
+   "note": "Шуваловский дворец на Фонтанке",
+   "wiki": "Музей Фаберже (Санкт-Петербург)",
+   "tags": [
+    "art"
+   ]
+  },
+  {
+   "id": "kazan",
+   "name": "Казанский собор",
+   "category": "landmark",
+   "lat": 59.9342,
+   "lon": 30.3245,
+   "duration": 30,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 4,
+   "url": null,
+   "hours": {
+    "open": "08:00",
+    "close": "19:00",
+    "closed": []
+   },
+   "note": "Вход свободный",
+   "wiki": "Казанский собор (Санкт-Петербург)",
+   "tags": [
+    "architecture"
+   ]
+  },
+  {
+   "id": "aurora",
+   "name": "Крейсер «Аврора»",
+   "category": "museum",
+   "lat": 59.9554,
+   "lon": 30.3378,
+   "duration": 60,
+   "price_adult": 600,
+   "price_child": 0,
+   "kids": true,
+   "priority": 3,
+   "url": null,
+   "hours": {
+    "open": "11:00",
+    "close": "18:00",
+    "closed": [
+     0
+    ]
+   },
+   "note": "Корабль-музей на Петроградской набережной",
+   "wiki": "Аврора (крейсер)",
+   "tags": [
+    "history"
+   ]
+  },
+  {
+   "id": "pushkin",
+   "name": "Музей-квартира Пушкина",
+   "category": "museum",
+   "lat": 59.9408,
+   "lon": 30.3215,
+   "duration": 60,
+   "price_adult": 400,
+   "price_child": 0,
+   "kids": false,
+   "priority": 3,
+   "url": null,
+   "hours": {
+    "open": "10:30",
+    "close": "18:00",
+    "closed": [
+     1
+    ]
+   },
+   "note": "Мойка, 12",
+   "wiki": "Музей-квартира А. С. Пушкина (Санкт-Петербург)",
+   "tags": [
+    "history",
+    "literature"
+   ]
+  },
+  {
+   "id": "erarta",
+   "name": "Музей современного искусства «Эрарта»",
+   "category": "museum",
+   "lat": 59.9318,
+   "lon": 30.2511,
+   "duration": 120,
+   "price_adult": 700,
+   "price_child": 0,
+   "kids": false,
+   "priority": 2,
+   "url": "https://www.erarta.com",
+   "hours": {
+    "open": "10:00",
+    "close": "22:00",
+    "closed": [
+     1
+    ]
+   },
+   "note": "Васильевский остров",
+   "wiki": "Эрарта",
+   "tags": [
+    "art"
+   ]
+  },
+  {
+   "id": "grandmaket",
+   "name": "Гранд Макет Россия",
+   "category": "museum",
+   "lat": 59.889,
+   "lon": 30.3296,
+   "duration": 90,
+   "price_adult": 650,
+   "price_child": 400,
+   "kids": true,
+   "kids_bonus": true,
+   "priority": 2,
+   "url": "https://grandmaket.ru",
+   "hours": {
+    "open": "10:00",
+    "close": "20:00",
+    "closed": []
+   },
+   "note": "Огромный макет страны — интересно детям",
+   "wiki": "Гранд Макет Россия",
+   "tags": [
+    "kids"
+   ]
+  },
+  {
+   "id": "zoo",
+   "name": "Ленинградский зоопарк",
+   "category": "museum",
+   "lat": 59.9522,
+   "lon": 30.3071,
+   "duration": 120,
+   "price_adult": 900,
+   "price_child": 400,
+   "kids": true,
+   "kids_bonus": true,
+   "priority": 2,
+   "url": "https://spbzoo.ru",
+   "hours": {
+    "open": "10:00",
+    "close": "17:00",
+    "closed": []
+   },
+   "note": "Александровский парк",
+   "wiki": "Ленинградский зоопарк",
+   "tags": [
+    "kids",
+    "nature"
+   ]
+  },
+  {
+   "id": "oceanarium",
+   "name": "Океанариум",
+   "category": "museum",
+   "lat": 59.9182,
+   "lon": 30.3478,
+   "duration": 90,
+   "price_adult": 1200,
+   "price_child": 800,
+   "kids": true,
+   "kids_bonus": true,
+   "priority": 2,
+   "url": null,
+   "hours": {
+    "open": "10:00",
+    "close": "21:00",
+    "closed": []
+   },
+   "note": "Улица Марата",
+   "tags": [
+    "kids",
+    "nature"
+   ]
+  },
+  {
+   "id": "dvortsovaya",
+   "name": "Дворцовая площадь и Дворцовая набережная",
+   "category": "walk",
+   "lat": 59.939,
+   "lon": 30.3158,
+   "duration": 60,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 5,
+   "url": null,
+   "hours": null,
+   "note": "Прогулка около 1,2 км",
+   "wiki": "Дворцовая площадь",
+   "tags": [
+    "architecture",
+    "history"
+   ]
+  },
+  {
+   "id": "strelka",
+   "name": "Стрелка Васильевского острова",
+   "category": "walk",
+   "lat": 59.944,
+   "lon": 30.3065,
+   "duration": 30,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 4,
+   "url": null,
+   "hours": null,
+   "note": "Ростральные колонны и вид на Неву",
+   "wiki": "Стрелка Васильевского острова",
+   "tags": [
+    "architecture",
+    "views"
+   ]
+  },
+  {
+   "id": "letniy",
+   "name": "Летний сад",
+   "category": "walk",
+   "lat": 59.9445,
+   "lon": 30.3369,
+   "duration": 60,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 4,
+   "url": null,
+   "hours": {
+    "open": "10:00",
+    "close": "22:00",
+    "closed": []
+   },
+   "note": "Статуи и фонтаны",
+   "wiki": "Летний сад",
+   "tags": [
+    "nature",
+    "history"
+   ]
+  },
+  {
+   "id": "newholland",
+   "name": "Остров Новая Голландия",
+   "category": "walk",
+   "lat": 59.9295,
+   "lon": 30.2895,
+   "duration": 60,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 3,
+   "url": null,
+   "hours": {
+    "open": "09:00",
+    "close": "22:00",
+    "closed": []
+   },
+   "note": "Парк, кафе и детская площадка",
+   "wiki": "Новая Голландия",
+   "tags": [
+    "architecture"
+   ]
+  },
+  {
+   "id": "nevsky",
+   "name": "Прогулка по Невскому проспекту",
+   "category": "walk",
+   "lat": 59.9343,
+   "lon": 30.3351,
+   "duration": 45,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 4,
+   "url": null,
+   "hours": null,
+   "note": "Дом Зингера, Гостиный двор, Аничков мост",
+   "wiki": "Невский проспект",
+   "tags": [
+    "architecture"
+   ]
+  },
+  {
+   "id": "bronze",
+   "name": "Медный всадник и Сенатская площадь",
+   "category": "walk",
+   "lat": 59.9364,
+   "lon": 30.3022,
+   "duration": 20,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 4,
+   "url": null,
+   "hours": null,
+   "note": "",
+   "wiki": "Медный всадник",
+   "tags": [
+    "history",
+    "architecture"
+   ]
+  },
+  {
+   "id": "griboedov",
+   "name": "Канал Грибоедова и Банковский мост",
+   "category": "walk",
+   "lat": 59.931,
+   "lon": 30.322,
+   "duration": 25,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 3,
+   "url": null,
+   "hours": null,
+   "note": "Мост с грифонами",
+   "wiki": "Банковский мост",
+   "tags": [
+    "architecture"
+   ]
+  },
+  {
+   "id": "kamennoostrovsky",
+   "name": "Прогулка по Петроградской стороне",
+   "category": "walk",
+   "lat": 59.9622,
+   "lon": 30.3122,
+   "duration": 60,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": false,
+   "priority": 2,
+   "url": null,
+   "hours": null,
+   "note": "Каменноостровский проспект и модерн",
+   "wiki": "Каменноостровский проспект",
+   "tags": [
+    "architecture"
+   ]
+  },
+  {
+   "id": "smolny",
+   "name": "Смольный собор",
+   "category": "landmark",
+   "lat": 59.9488,
+   "lon": 30.3953,
+   "duration": 40,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "priority": 2,
+   "url": null,
+   "hours": {
+    "open": "10:00",
+    "close": "18:00",
+    "closed": []
+   },
+   "note": "Барокко Растрелли",
+   "wiki": "Смольный собор",
+   "tags": [
+    "architecture"
+   ]
+  },
+  {
+   "id": "tavrichesky",
+   "name": "Таврический сад",
+   "category": "walk",
+   "lat": 59.945,
+   "lon": 30.37,
+   "duration": 45,
+   "price_adult": 0,
+   "price_child": 0,
+   "kids": true,
+   "kids_bonus": true,
+   "priority": 1,
+   "url": null,
+   "hours": null,
+   "note": "Пруды и детские площадки",
+   "wiki": "Таврический сад",
+   "tags": [
+    "nature"
+   ]
+  },
+  {
+   "id": "boat",
+   "name": "Прогулка на теплоходе по рекам и каналам",
+   "category": "walk",
+   "lat": 59.9356,
+   "lon": 30.329,
+   "duration": 90,
+   "price_adult": 1200,
+   "price_child": 800,
+   "kids": true,
+   "priority": 4,
+   "url": null,
+   "months": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "hours": {
+    "open": "11:00",
+    "close": "22:00",
+    "closed": []
+   },
+   "note": "Сезон навигации — примерно с мая по октябрь",
+   "wiki": "Реки и каналы Санкт-Петербурга",
+   "tags": [
+    "views",
+    "architecture"
+   ]
+  },
+  {
+   "id": "alexandrinsky",
+   "name": "Александринский театр",
+   "category": "theatre",
+   "lat": 59.9324,
+   "lon": 30.3366,
+   "duration": 180,
+   "price_adult": 1200,
+   "price_child": 1200,
+   "kids": false,
+   "priority": 4,
+   "url": "https://alexandrinsky.ru",
+   "start": "19:00",
+   "budget_level": 1,
+   "note": "Недорогие места на балконе",
+   "wiki": "Александринский театр",
+   "genre": "drama"
+  },
+  {
+   "id": "bdt",
+   "name": "Большой драматический театр",
+   "category": "theatre",
+   "lat": 59.9304,
+   "lon": 30.3426,
+   "duration": 180,
+   "price_adult": 1500,
+   "price_child": 1500,
+   "kids": false,
+   "priority": 3,
+   "url": "https://bdt.spb.ru",
+   "start": "19:00",
+   "budget_level": 1,
+   "note": "Набережная Фонтанки",
+   "wiki": "Большой драматический театр имени Г. А. Товстоногова",
+   "genre": "drama"
+  },
+  {
+   "id": "mikhailovsky",
+   "name": "Михайловский театр",
+   "category": "theatre",
+   "lat": 59.9381,
+   "lon": 30.3289,
+   "duration": 180,
+   "price_adult": 2500,
+   "price_child": 2500,
+   "kids": false,
+   "priority": 3,
+   "url": null,
+   "start": "19:00",
+   "budget_level": 2,
+   "note": "Опера и балет",
+   "wiki": "Михайловский театр",
+   "genre": "opera"
+  },
+  {
+   "id": "mariinsky",
+   "name": "Мариинский театр",
+   "category": "theatre",
+   "lat": 59.9257,
+   "lon": 30.2961,
+   "duration": 180,
+   "price_adult": 3500,
+   "price_child": 3500,
+   "kids": false,
+   "priority": 4,
+   "url": "https://www.mariinsky.ru",
+   "start": "19:00",
+   "budget_level": 3,
+   "note": "Опера и балет",
+   "wiki": "Мариинский театр",
+   "genre": "opera"
+  },
+  {
+   "id": "circus",
+   "name": "Цирк Чинизелли",
+   "category": "theatre",
+   "lat": 59.9375,
+   "lon": 30.3406,
+   "duration": 150,
+   "price_adult": 1800,
+   "price_child": 1200,
+   "kids": true,
+   "kids_bonus": true,
+   "priority": 3,
+   "url": null,
+   "start": "19:00",
+   "budget_level": 1,
+   "note": "Цирк на Фонтанке — хорош с детьми",
+   "wiki": "Большой Санкт-Петербургский государственный цирк",
+   "genre": "circus"
+  },
+  {
+   "id": "f_pyshki",
+   "name": "Пышечная на Большой Конюшенной",
+   "category": "food",
+   "lat": 59.9366,
+   "lon": 30.3239,
+   "avg_check": 400,
+   "kids": true,
+   "hours": {
+    "open": "09:00",
+    "close": "20:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch"
+   ],
+   "note": "Легендарные пышки, быстро",
+   "wiki": "Большая Конюшенная улица",
+   "wiki_area": true
+  },
+  {
+   "id": "f_singer",
+   "name": "Кафе в Доме Зингера",
+   "category": "food",
+   "lat": 59.9357,
+   "lon": 30.326,
+   "avg_check": 1300,
+   "kids": true,
+   "hours": {
+    "open": "09:00",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch",
+    "dinner"
+   ],
+   "note": "Вид на Казанский собор",
+   "wiki": "Дом Зингера"
+  },
+  {
+   "id": "f_stolle_kon",
+   "name": "«Штолле» у Конюшенной площади",
+   "category": "food",
+   "lat": 59.9398,
+   "lon": 30.3256,
+   "avg_check": 800,
+   "kids": true,
+   "hours": {
+    "open": "09:00",
+    "close": "22:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch",
+    "dinner"
+   ],
+   "note": "Пироги",
+   "wiki": "Конюшенная площадь",
+   "wiki_area": true
+  },
+  {
+   "id": "f_center_1",
+   "name": "«Литературное кафе» на Невском, 18",
+   "category": "food",
+   "lat": 59.9365,
+   "lon": 30.3157,
+   "avg_check": 2000,
+   "kids": true,
+   "hours": {
+    "open": "11:00",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "lunch",
+    "dinner"
+   ],
+   "note": "Русско-французская кухня в историческом кафе, где бывал Пушкин",
+   "wiki": "Дом Котомина",
+   "url": "https://litcafe.su",
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_isaac",
+   "name": "«Счастье» на Малой Морской",
+   "category": "food",
+   "lat": 59.9331,
+   "lon": 30.3104,
+   "avg_check": 2000,
+   "kids": true,
+   "hours": {
+    "open": "09:00",
+    "close": "23:59",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch",
+    "dinner"
+   ],
+   "note": "Кафе-кондитерская с завтраками у Исаакиевского собора",
+   "wiki": "Исаакиевская площадь",
+   "url": "https://schastye.com",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_newholland",
+   "name": "Kuznyahouse на Новой Голландии",
+   "category": "food",
+   "lat": 59.9296,
+   "lon": 30.2893,
+   "avg_check": 2000,
+   "kids": true,
+   "hours": {
+    "open": "12:00",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "lunch",
+    "dinner"
+   ],
+   "note": "Европейская кухня, своя коптильня и круглогодичная веранда; часы уточните",
+   "wiki": "Новая Голландия",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_fontanka",
+   "name": "Ресторан на Фонтанке (подбор из Яндекс Карт)",
+   "category": "food",
+   "lat": 59.934,
+   "lon": 30.341,
+   "avg_check": 2500,
+   "kids": true,
+   "hours": {
+    "open": "12:00",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "lunch",
+    "dinner"
+   ],
+   "placeholder": true,
+   "note": "В продукте — ресторан с рейтингом от 4,5",
+   "wiki": "Фонтанка",
+   "wiki_area": true
+  },
+  {
+   "id": "f_petrograd",
+   "name": "«Теремок» на Большом проспекте П. С.",
+   "category": "food",
+   "lat": 59.9641,
+   "lon": 30.3081,
+   "avg_check": 600,
+   "kids": true,
+   "hours": {
+    "open": "08:30",
+    "close": "22:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch",
+    "dinner"
+   ],
+   "note": "Блины и русская кухня, быстро и недорого; в выходные с 9:30",
+   "wiki": "Петроградская сторона",
+   "url": "https://teremok.ru",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_vo",
+   "name": "Кафе у Стрелки Васильевского острова (подбор из Яндекс Карт)",
+   "category": "food",
+   "lat": 59.9425,
+   "lon": 30.298,
+   "avg_check": 1600,
+   "kids": true,
+   "hours": {
+    "open": "11:00",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "lunch",
+    "dinner"
+   ],
+   "placeholder": true,
+   "note": "В продукте — кафе с рейтингом от 4,5",
+   "wiki": "Стрелка Васильевского острова",
+   "wiki_area": true
+  },
+  {
+   "id": "f_liteyny",
+   "name": "Пироговая «Штолле» на Владимирском",
+   "category": "food",
+   "lat": 59.9285,
+   "lon": 30.3478,
+   "avg_check": 800,
+   "kids": true,
+   "hours": {
+    "open": "08:00",
+    "close": "22:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch",
+    "dinner"
+   ],
+   "note": "Осетинские и русские пироги; в выходные с 9:00 до 21:00",
+   "wiki": "Владимирский проспект",
+   "url": "https://spb.stolle.ru/addresses/vladimirskij-pr-15",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_moskovsky",
+   "name": "«Теремок» на Невском, 60",
+   "category": "food",
+   "lat": 59.9342,
+   "lon": 30.3362,
+   "avg_check": 600,
+   "kids": true,
+   "hours": {
+    "open": "07:30",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch",
+    "dinner"
+   ],
+   "note": "Блины и каши — удобно для раннего завтрака",
+   "wiki": "Невский проспект",
+   "url": "https://teremok.ru",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "h_economy",
+   "name": "AZIMUT Сити Отель на Лермонтовском",
+   "category": "hotel",
+   "lat": 59.9133,
+   "lon": 30.2903,
+   "price_night": 6500,
+   "tier": 1,
+   "note": "4★, большой городской отель; от центра — на метро или такси",
+   "wiki": "Лермонтовский проспект",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "h_mid",
+   "name": "Отель «Октябрьская» у Московского вокзала",
+   "category": "hotel",
+   "lat": 59.9318,
+   "lon": 30.361,
+   "price_night": 9500,
+   "tier": 2,
+   "note": "Исторический отель на площади Восстания, круглосуточная стойка",
+   "wiki": "Лиговский проспект",
+   "url": "http://www.oktober-hotel.spb.ru",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "h_high",
+   "name": "Гранд Отель Европа",
+   "category": "hotel",
+   "lat": 59.9354,
+   "lon": 30.3306,
+   "price_night": 28000,
+   "tier": 3,
+   "note": "5★ на углу Невского и Михайловской, у Русского музея",
+   "wiki": "Гранд Отель Европа",
+   "booking_url": "https://ostrovok.ru/rooms/evropa_grand_hotel_europe_grand_hotel/",
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "a_economy",
+   "name": "Квартира посуточно у «Московских ворот» (подбор)",
+   "category": "hotel",
+   "stay": "apartment",
+   "placeholder": true,
+   "lat": 59.8915,
+   "lon": 30.3175,
+   "price_night": 4200,
+   "tier": 1,
+   "capacity": 4,
+   "note": "Студия или однушка до 4 гостей, своя кухня; до центра — 15 минут на метро",
+   "wiki": "Московские ворота (Санкт-Петербург)",
+   "wiki_area": true,
+   "checked": "Черновой вариант прототипа: в MVP — реальные объявления Островка или Суточно.ру"
+  },
+  {
+   "id": "a_mid",
+   "name": "Апартаменты в центре у Владимирской (подбор)",
+   "category": "hotel",
+   "stay": "apartment",
+   "placeholder": true,
+   "lat": 59.9275,
+   "lon": 30.348,
+   "price_night": 7500,
+   "tier": 2,
+   "capacity": 4,
+   "note": "Квартира до 4 гостей: кухня, стиральная машина; до Невского — пешком",
+   "wiki": "Владимирская площадь (Санкт-Петербург)",
+   "wiki_area": true,
+   "checked": "Черновой вариант прототипа: в MVP — реальные объявления Островка или Суточно.ру"
+  },
+  {
+   "id": "a_high",
+   "name": "Апартаменты в историческом центре у Мойки (подбор)",
+   "category": "hotel",
+   "stay": "apartment",
+   "placeholder": true,
+   "lat": 59.9365,
+   "lon": 30.323,
+   "price_night": 16000,
+   "tier": 3,
+   "capacity": 4,
+   "note": "Просторная квартира до 4 гостей между Невским и Мойкой",
+   "wiki": "Набережная реки Мойки",
+   "wiki_area": true,
+   "checked": "Черновой вариант прототипа: в MVP — реальные объявления Островка или Суточно.ру"
+  },
+  {
+   "id": "f_vasilyevsky2",
+   "name": "Пироговая «Штолле» на 1-й линии В. О.",
+   "category": "food",
+   "lat": 59.9407,
+   "lon": 30.2832,
+   "avg_check": 800,
+   "kids": true,
+   "hours": {
+    "open": "08:00",
+    "close": "22:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch",
+    "dinner"
+   ],
+   "note": "Пироги, супы, завтраки",
+   "wiki": "Васильевский остров",
+   "url": "https://spb.stolle.ru/addresses/1-ya-liniya-vo-50",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_sennaya",
+   "name": "Ресторан у Сенной площади (подбор из Яндекс Карт)",
+   "category": "food",
+   "lat": 59.927,
+   "lon": 30.32,
+   "avg_check": 1700,
+   "kids": true,
+   "hours": {
+    "open": "12:00",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "lunch",
+    "dinner"
+   ],
+   "placeholder": true,
+   "note": "В продукте — ресторан с рейтингом от 4,5",
+   "wiki": "Сенная площадь",
+   "wiki_area": true
+  },
+  {
+   "id": "f_gostiny",
+   "name": "Кафе-кондитерская «Север-Метрополь» на Невском, 44",
+   "category": "food",
+   "lat": 59.9347,
+   "lon": 30.3337,
+   "avg_check": 700,
+   "kids": true,
+   "hours": {
+    "open": "09:00",
+    "close": "21:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch"
+   ],
+   "note": "Знаменитые торты и пирожные «Север»; часы уточните",
+   "wiki": "Большой Гостиный двор",
+   "url": "http://metropol.spb.su",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_konyushennaya",
+   "name": "«Пхали-Хинкали» на Большой Морской",
+   "category": "food",
+   "lat": 59.9345,
+   "lon": 30.3139,
+   "avg_check": 1300,
+   "kids": true,
+   "hours": {
+    "open": "11:00",
+    "close": "23:00",
+    "closed": []
+   },
+   "meal": [
+    "lunch",
+    "dinner"
+   ],
+   "note": "Грузинская кухня: хинкали, хачапури, пхали",
+   "wiki": "Большая Морская улица",
+   "wiki_area": true,
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  },
+  {
+   "id": "f_hotel_area",
+   "name": "Кофейня у отеля (подбор из Яндекс Карт)",
+   "category": "food",
+   "lat": 59.9332,
+   "lon": 30.3445,
+   "avg_check": 700,
+   "kids": true,
+   "hours": {
+    "open": "08:00",
+    "close": "21:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch"
+   ],
+   "placeholder": true,
+   "note": "Завтраки и выпечка"
+  },
+  {
+   "id": "f_bushe_mm",
+   "name": "Пекарня «Буше» на Малой Морской",
+   "category": "food",
+   "lat": 59.9361,
+   "lon": 30.3128,
+   "avg_check": 700,
+   "kids": true,
+   "hours": {
+    "open": "08:00",
+    "close": "22:00",
+    "closed": []
+   },
+   "meal": [
+    "breakfast",
+    "lunch"
+   ],
+   "url": "https://www.bushe.ru",
+   "wiki": "Малая Морская улица",
+   "wiki_area": true,
+   "note": "Выпечка и завтраки у Адмиралтейской",
+   "checked": "Данные из открытых справочников, октябрь 2026 — часы и цены уточняйте перед визитом"
+  }
+ ]
+}
