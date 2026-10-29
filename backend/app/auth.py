@@ -17,7 +17,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from . import mailer, store
+from . import db, mailer
 
 COOKIE = "sh_session"
 SESSION_DAYS = 30
@@ -60,8 +60,8 @@ def _check_new_password(password: str) -> None:
 
 # ------------------------------------------------------------------ users
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _public(row) -> dict:
@@ -79,14 +79,17 @@ def register(email: str, password: str, name: str) -> dict:
     if not name:
         raise ValueError("Напишите, как к вам обращаться")
     _check_new_password(password)
-    with store._lock, store._db() as con:
-        if con.execute("select 1 from users where email = ?", (email,)).fetchone():
+    password = hash_password(password)  # scrypt — до транзакции, чтобы не держать блокировку
+    with db.tx() as con:
+        # две регистрации одновременно: иначе обе сочтут себя первыми или пройдут проверку почты
+        db.q(con, "lock table users in share row exclusive mode")
+        if db.q(con, "select 1 from users where email = :email", email=email).first():
             raise ValueError("Такая почта уже зарегистрирована — войдите")
-        first = con.execute("select count(*) from users").fetchone()[0] == 0
-        uid = con.execute("insert into users (email, name, password, created) values (?, ?, ?, ?)",
-                          (email, name, hash_password(password), _now())).lastrowid
+        first = db.q(con, "select count(*) from users").scalar() == 0
+        uid = db.q(con, "insert into users (email, name, password, created) values (:email, :name, :pw, :now) "
+                        "returning id", email=email, name=name, pw=password, now=_now()).scalar()
         if first:  # поездки, построенные до аккаунтов, — первому пользователю (владельцу прототипа)
-            con.execute("update trips set user_id = ? where user_id is null", (uid,))
+            db.q(con, "update trips set user_id = :uid where user_id is null", uid=uid)
     return {"id": uid, "email": email, "name": name}
 
 
@@ -109,8 +112,8 @@ def login(email: str, password: str, ip: str = "") -> dict:
     keys = (f"email:{email}", f"ip:{ip}")
     if _limited(*keys):
         raise PermissionError("Слишком много попыток входа — подождите 15 минут")
-    with store._lock, store._db() as con:
-        row = con.execute("select id, email, name, password from users where email = ?", (email,)).fetchone()
+    with db.tx() as con:
+        row = db.q(con, "select id, email, name, password from users where email = :email", email=email).first()
     if not row or not check_password(password or "", row[3]):
         _fail(*keys)
         raise ValueError("Неверная почта или пароль")
@@ -120,14 +123,15 @@ def login(email: str, password: str, ip: str = "") -> dict:
 
 
 def change_password(user_id: int, old: str, new: str) -> None:
-    with store._lock, store._db() as con:
-        row = con.execute("select password from users where id = ?", (user_id,)).fetchone()
+    with db.tx() as con:
+        row = db.q(con, "select password from users where id = :uid", uid=user_id).first()
     if not row or not check_password(old or "", row[0]):
         raise ValueError("Текущий пароль неверный")
     _check_new_password(new)
-    with store._lock, store._db() as con:
-        con.execute("update users set password = ? where id = ?", (hash_password(new), user_id))
-        con.execute("delete from sessions where user_id = ?", (user_id,))  # выйти на других устройствах
+    password = hash_password(new)
+    with db.tx() as con:
+        db.q(con, "update users set password = :pw where id = :uid", pw=password, uid=user_id)
+        db.q(con, "delete from sessions where user_id = :uid", uid=user_id)  # выйти на других устройствах
 
 
 # ------------------------------------------------------------------ sessions
@@ -138,26 +142,27 @@ def _digest(token: str) -> str:
 
 def new_session(user_id: int) -> str:
     token = secrets.token_urlsafe(32)
-    expires = (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat()
-    with store._lock, store._db() as con:
-        con.execute("insert into sessions values (?, ?, ?, ?)", (_digest(token), user_id, _now(), expires))
-        con.execute("delete from sessions where expires < ?", (_now(),))
+    now = _now()
+    with db.tx() as con:
+        db.q(con, "insert into sessions (token, user_id, created, expires) values (:t, :uid, :now, :exp)",
+             t=_digest(token), uid=user_id, now=now, exp=now + timedelta(days=SESSION_DAYS))
+        db.q(con, "delete from sessions where expires < :now", now=now)
     return token
 
 
 def session_user(token: str | None) -> dict | None:
     if not token:
         return None
-    with store._lock, store._db() as con:
-        row = con.execute("select u.id, u.email, u.name from sessions s join users u on u.id = s.user_id "
-                          "where s.token = ? and s.expires > ?", (_digest(token), _now())).fetchone()
+    with db.tx() as con:
+        row = db.q(con, "select u.id, u.email, u.name from sessions s join users u on u.id = s.user_id "
+                        "where s.token = :t and s.expires > :now", t=_digest(token), now=_now()).first()
     return _public(row) if row else None
 
 
 def end_session(token: str | None) -> None:
     if token:
-        with store._lock, store._db() as con:
-            con.execute("delete from sessions where token = ?", (_digest(token),))
+        with db.tx() as con:
+            db.q(con, "delete from sessions where token = :t", t=_digest(token))
 
 
 # ------------------------------------------------------------------ забыли пароль
@@ -170,19 +175,20 @@ def request_reset(email: str) -> bool:
     email = norm_email(email)
     if not EMAIL_RE.fullmatch(email):
         raise ValueError("Проверьте адрес почты")
-    with store._lock, store._db() as con:
-        row = con.execute("select id, email, name from users where email = ?", (email,)).fetchone()
+    with db.tx() as con:
+        row = db.q(con, "select id, email, name from users where email = :email", email=email).first()
         if not row:
             return False
-        since = (datetime.now(timezone.utc) - timedelta(seconds=RESET_WINDOW)).isoformat()
-        recent = con.execute("select count(*) from resets where user_id = ? and created > ?", (row[0], since)).fetchone()[0]
+        now = _now()
+        since = now - timedelta(seconds=RESET_WINDOW)
+        recent = db.q(con, "select count(*) from resets where user_id = :uid and created > :since",
+                      uid=row[0], since=since).scalar()
         if recent >= RESET_MAX:
             return False
         token = secrets.token_urlsafe(32)
-        expires = (datetime.now(timezone.utc) + timedelta(hours=RESET_HOURS)).isoformat()
-        con.execute("insert into resets (token, user_id, created, expires, used) values (?, ?, ?, ?, null)",
-                    (_digest(token), row[0], _now(), expires))
-        con.execute("delete from resets where expires < ?", (since,))  # старые — убираем
+        db.q(con, "insert into resets (token, user_id, created, expires, used) values (:t, :uid, :now, :exp, null)",
+             t=_digest(token), uid=row[0], now=now, exp=now + timedelta(hours=RESET_HOURS))
+        db.q(con, "delete from resets where expires < :since", since=since)  # старые — убираем
     mailer.send_password_reset(row[1], row[2], token, RESET_HOURS)
     return True
 
@@ -191,10 +197,9 @@ def reset_user(token: str) -> dict | None:
     """Чей это токен сброса, если он ещё годен."""
     if not token:
         return None
-    with store._lock, store._db() as con:
-        row = con.execute("select u.id, u.email, u.name from resets r join users u on u.id = r.user_id "
-                          "where r.token = ? and r.used is null and r.expires > ?",
-                          (_digest(token), _now())).fetchone()
+    with db.tx() as con:
+        row = db.q(con, "select u.id, u.email, u.name from resets r join users u on u.id = r.user_id "
+                        "where r.token = :t and r.used is null and r.expires > :now", t=_digest(token), now=_now()).first()
     return _public(row) if row else None
 
 
@@ -204,11 +209,15 @@ def reset_password(token: str, new: str) -> dict:
     if not user:
         raise ValueError("Ссылка устарела — запросите письмо заново")
     _check_new_password(new)
-    with store._lock, store._db() as con:
-        con.execute("update users set password = ? where id = ?", (hash_password(new), user["id"]))
-        con.execute("update resets set used = ? where token = ?", (_now(), _digest(token)))
-        con.execute("delete from resets where user_id = ? and used is null", (user["id"],))  # прочие письма — недействительны
-        con.execute("delete from sessions where user_id = ?", (user["id"],))
+    password = hash_password(new)
+    with db.tx() as con:
+        # used is null — в условии: две отправки одной ссылки одновременно не сменят пароль дважды
+        if not db.q(con, "update resets set used = :now where token = :t and used is null",
+                    now=_now(), t=_digest(token)).rowcount:
+            raise ValueError("Ссылка устарела — запросите письмо заново")
+        db.q(con, "update users set password = :pw where id = :uid", pw=password, uid=user["id"])
+        db.q(con, "delete from resets where user_id = :uid and used is null", uid=user["id"])  # прочие письма — недействительны
+        db.q(con, "delete from sessions where user_id = :uid", uid=user["id"])
     with _fails_lock:
         _fails.pop(f"email:{user['email']}", None)  # пароль сменили — пауза за подбор больше не нужна
     return user

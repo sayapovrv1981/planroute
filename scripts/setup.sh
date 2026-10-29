@@ -42,11 +42,15 @@ backend/.venv/bin/python -m pip install -q --upgrade pip
 backend/.venv/bin/python -m pip install -q -r backend/requirements.txt
 # Инструменты разработки ставим отдельно: если у какого-то нет сборки под новый Python, приложение всё равно заработает
 backend/.venv/bin/python -m pip install -q ruff || echo "  ruff не установился — форматирование Python будет недоступно"
+backend/.venv/bin/python -m pip install -q "moto[s3]>=5" httpx2 || echo "  moto не установился — тесты хранилища S3 не запустятся"
 if backend/.venv/bin/python -m pip install -q playwright; then
   backend/.venv/bin/python -m playwright install chromium || echo "  браузер для проверок не скачался — это нужно только для e2e-теста"
 else
   echo "  playwright не установился — это нужно только для e2e-теста"
 fi
+
+echo "→ PostgreSQL для разработки (backend/var/postgres, порт 54329) и каталог мест"
+(cd backend && .venv/bin/python manage.py devdb start && .venv/bin/python manage.py setup)
 
 echo "→ Фронтенд"
 (cd frontend && npm install --no-audit --no-fund && npm run build)

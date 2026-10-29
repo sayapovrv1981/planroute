@@ -1,19 +1,14 @@
-import tempfile
+import testdb  # noqa: F401 — первым: временный PostgreSQL вместо настоящей базы
 import unittest
-from pathlib import Path
 from unittest import mock
 
-from app import auth, store
+from app import auth, db, store
 
 
 class AuthTest(unittest.TestCase):
     def setUp(self):
-        self.base = mock.patch.object(store, "BASE", Path(tempfile.mkdtemp()))
-        self.base.start()
+        testdb.reset()
         auth._fails.clear()
-
-    def tearDown(self):
-        self.base.stop()
 
     def test_password_hash(self):
         h = auth.hash_password("пароль-123")
@@ -26,8 +21,8 @@ class AuthTest(unittest.TestCase):
 
     def test_register_and_orphan_trips(self):
         # поездки, построенные до аккаунтов, — первому пользователю, дальше никому
-        with store._db() as con:
-            con.execute("insert into trips (id, data, created, updated) values ('old1', '{}', 'x', 'x')")
+        with db.tx() as con:
+            db.q(con, "insert into trips (id, data, created, updated) values ('old1', '{}', now(), now())")
         first = auth.register("Owner@Mail.ru ", "secret-pass-1", "Руслан")
         self.assertEqual(first["email"], "owner@mail.ru")
         self.assertIsNotNone(store.get("old1", first["id"]))
@@ -43,8 +38,8 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(auth.login("U@mail.ru", "secret-pass-1", "1.1.1.1")["id"], u["id"])
         token = auth.new_session(u["id"])
         self.assertEqual(auth.session_user(token)["email"], "u@mail.ru")
-        with store._db() as con:  # в базе — только хеш токена
-            self.assertIsNone(con.execute("select 1 from sessions where token = ?", (token,)).fetchone())
+        with db.tx() as con:  # в базе — только хеш токена
+            self.assertIsNone(db.q(con, "select 1 from sessions where token = :t", t=token).first())
         auth.end_session(token)
         self.assertIsNone(auth.session_user(token))
         for _ in range(auth.MAX_FAILS):
@@ -72,8 +67,8 @@ class AuthTest(unittest.TestCase):
             self.assertEqual(len(sent), 1)
             self.assertEqual(sent[0][0], "u@mail.ru")
             token = sent[0][1].split("/reset?token=")[1].split()[0]
-            with store._db() as con:  # в базе — только хеш токена
-                self.assertIsNone(con.execute("select 1 from resets where token = ?", (token,)).fetchone())
+            with db.tx() as con:  # в базе — только хеш токена
+                self.assertIsNone(db.q(con, "select 1 from resets where token = :t", t=token).first())
             # пока не использован — ссылка годна и говорит, чей это аккаунт
             self.assertEqual(auth.reset_user(token)["email"], "u@mail.ru")
             self.assertIsNone(auth.reset_user("мусор"))
@@ -89,13 +84,13 @@ class AuthTest(unittest.TestCase):
             # просроченная ссылка не работает
             auth.request_reset("u@mail.ru")
             old = sent[-1][1].split("/reset?token=")[1].split()[0]
-            with store._db() as con:
-                con.execute("update resets set expires = '2000-01-01T00:00:00+00:00' where used is null")
+            with db.tx() as con:
+                db.q(con, "update resets set expires = '2000-01-01T00:00:00+00:00' where used is null")
             self.assertIsNone(auth.reset_user(old))
             # не чаще RESET_MAX писем в час
             sent.clear()
-            with store._db() as con:
-                con.execute("delete from resets")
+            with db.tx() as con:
+                db.q(con, "delete from resets")
             for _ in range(auth.RESET_MAX):
                 self.assertTrue(auth.request_reset("u@mail.ru"))
             self.assertFalse(auth.request_reset("u@mail.ru"))

@@ -1,4 +1,5 @@
 """Сквозной тест API: настоящий uvicorn в отдельном потоке, запросы через urllib."""
+import testdb  # noqa: F401 — первым: временный PostgreSQL вместо настоящей базы
 import json
 import os
 import socket

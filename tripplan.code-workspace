@@ -71,7 +71,7 @@
         ],
         "cwd": "${workspaceFolder}/backend",
         "python": "${workspaceFolder}/backend/.venv/bin/python",
-        "preLaunchTask": "Фронтенд: сборка",
+        "preLaunchTask": "Перед запуском: база и фронтенд",
         "jinja": false,
         "justMyCode": true
       },
@@ -98,6 +98,21 @@
         "label": "Установка: всё",
         "type": "shell",
         "command": "bash scripts/setup.sh",
+        "problemMatcher": []
+      },
+      {
+        "label": "Перед запуском: база и фронтенд",
+        "dependsOn": ["База: запуск, миграции, каталог", "Фронтенд: сборка"],
+        "dependsOrder": "sequence",
+        "problemMatcher": []
+      },
+      {
+        "label": "База: запуск, миграции, каталог",
+        "type": "shell",
+        "command": ".venv/bin/python manage.py devdb start && .venv/bin/python manage.py setup",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
         "problemMatcher": []
       },
       {

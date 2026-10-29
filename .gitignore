@@ -11,3 +11,4 @@ backend/.env
 # личные настройки Claude Code и VS Code на этой машине
 .claude/settings.local.json
 *.zip
+/.env

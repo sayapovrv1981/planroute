@@ -9,9 +9,12 @@
 Нужны Python 3.11+ и Node.js 20+ (`brew install python node`).
 
 ```bash
-bash scripts/setup.sh   # окружение, зависимости, сборка, тесты
+bash scripts/setup.sh   # окружение, зависимости, PostgreSQL для разработки, сборка, тесты
 bash scripts/run.sh     # сервер на http://localhost:8000
 ```
+
+Ставить PostgreSQL и Docker не нужно: `manage.py devdb` берёт программы PostgreSQL 16 из колеса pgserver с PyPI
+и держит базу в `backend/var/postgres` (порт 54329). Тесты поднимают свою временную базу сами.
 
 В VS Code: File → Open Workspace from File… → `tripplan.code-workspace`. VS Code предложит установить рекомендуемые расширения — нажмите «Install». Затем Terminal → Run Task → «Установка: всё», после неё F5 — запустится сервер с отладкой.
 
@@ -50,19 +53,54 @@ bash scripts/run.sh     # сервер на http://localhost:8000
 - **Без настройки** подсказки идут через Photon — бесплатный сервис на данных OpenStreetMap. Подходит для разработки, но при большой нагрузке может ограничивать запросы.
 - **Для лучшего качества по России** подключите DaData: зарегистрируйтесь на dadata.ru, скопируйте API-ключ, создайте файл `backend/.env` по образцу `backend/.env.example` и впишите `DADATA_API_KEY=ваш_ключ`. Перезапустите сервер.
 
+## База, файлы и запуск на сервере
+
+Данные — в PostgreSQL (`DATABASE_URL`), схема — миграции Alembic в `backend/migrations/`, файлы документов —
+на диске или в S3-совместимом хранилище (`STORAGE=s3`, Yandex Object Storage). Все настройки сервера —
+в `app/config.py`, образец — `backend/.env.example`. Команды — из папки `backend`:
+
+```
+.venv/bin/python manage.py devdb start|stop|status   # локальный PostgreSQL для разработки
+.venv/bin/python manage.py setup                     # миграции + каталог мест из data/*.json в базу
+.venv/bin/python manage.py import-catalog            # только каталог — после правки data/*_places.json
+.venv/bin/python manage.py sqlite-to-pg [файл]       # перенос аккаунтов и поездок из прежней SQLite
+.venv/bin/python manage.py files-to-s3 [папка]       # перенос файлов документов из var/uploads в S3
+```
+
+Новая миграция после изменения таблиц в `app/db.py`: `.venv/bin/alembic revision --autogenerate -m "что изменилось"`,
+проверить файл в `migrations/versions/` и `manage.py migrate`.
+
+**Каталог мест** правится в `data/*_places.json` (они в git — история правок видна), а сервер читает его из таблиц
+`cities` и `places`. После правки JSON — `manage.py import-catalog` и перезапуск сервера: каталог кешируется в памяти.
+Город по-прежнему называется именем файла (`spb_places.json`): так он записан в сохранённых поездках.
+
+**Docker:** `Dockerfile` собирает фронтенд и образ приложения, `docker-compose.yml` поднимает его вместе с PostgreSQL
+(MinIO вместо S3 — профиль `minio`). Перед стартом контейнер выполняет `manage.py setup`. Порядок — в комментарии
+в начале `docker-compose.yml`. Порт 8000 открыт только на 127.0.0.1: снаружи — через nginx с HTTPS.
+
+**Лимиты** (`app/limits.py`): один файл — до `MAX_FILE_MB` (15 МБ), запрос с файлами — до `MAX_UPLOAD_MB` (60 МБ),
+без файлов — до `MAX_JSON_KB` (512 КБ), больше — ответ 413. Частота запросов ограничена по пользователю
+(до входа — по адресу): вход и регистрация — 20 за 10 минут, распознавание билетов, создание поездки и загрузка
+страниц Суточно и Карт — по 30 за 10 минут, подсказки адресов и расписание — 120 в минуту, весь API — 600 в минуту;
+сверх — 429 с `Retry-After`. Счётчики в памяти процесса, поэтому uvicorn запускаем одним процессом.
+
 ## Устройство
 
 ```
 backend/
   app/planner.py     планировщик: каркас дня по темпу, отбор мест, порядок, пересчёт времени, бюджет
-  app/catalog.py     каталог мест: города находятся по файлам data/*_places.json (в MVP — API Яндекса)
+  app/catalog.py     каталог мест из базы (таблицы cities, places), импорт из data/*_places.json
   app/address.py     подсказки адресов (DaData или Photon) и оценка дороги до вокзала
-  app/store.py       поездки в SQLite и файлы документов в backend/var/
+  app/store.py       поездки в PostgreSQL, файлы документов — через app/storage.py (диск или S3)
+  app/config.py      настройки сервера из env; app/db.py — подключение и таблицы; app/limits.py — лимиты запросов
+  manage.py          база разработки, миграции, импорт каталога, перенос со старого сервера
+  migrations/        миграции Alembic
   app/main.py        HTTP API (Starlette) + раздача собранного фронтенда
   data/spb_places.json     черновой каталог Санкт-Петербурга
   data/kazan_places.json   черновой каталог Казани
   data/nnovgorod_places.json, data/kaliningrad_places.json — Нижний Новгород и Калининград
   tools/yandex_facts.py    рейтинг и часы заведений каталога по Яндекс Картам
+  tools/devpg.py           PostgreSQL для разработки и тестов из колеса pgserver
   tests/             юнит-тесты, тест API и проверка в браузере (e2e_smoke.py)
 frontend/
   src/FormPage.tsx   форма новой поездки
@@ -107,7 +145,7 @@ frontend/
 - **Выезд за город** (`category: "daytrip"`, например Свияжск, Раифа) занимает полдня. Его ставят на полный день
   в середине поездки, с утра. Время и способ дороги берутся из поля `far`; если `far.lunch`, обед входит в выезд.
 - **Новый город** — это файл `data/<город>_places.json` (`city`, `aliases`, `center`, `arrival_points`, `places`)
-  и оценка дороги из Москвы в `ROUTES` в `planner.py`. После добавления перезапустите службу.
+  и оценка дороги из Москвы в `ROUTES` в `planner.py`. После добавления — `manage.py import-catalog` и перезапуск сервера.
 - **Рейтинг и часы кафе и ресторанов** в каталоге берутся с Яндекс Карт скриптом `tools/yandex_facts.py` в два шага
   (поиск по названию находит и соседние заведения, поэтому id выбирают глазами):
 
@@ -115,6 +153,7 @@ frontend/
   cd backend
   .venv/bin/python -I tools/yandex_facts.py data/spb_places.json           # кандидаты рядом с координатами
   .venv/bin/python -I tools/yandex_facts.py data/spb_places.json --write   # по ymaps_id -> rating, reviews, hours
+  .venv/bin/python manage.py import-catalog                                # обновлённый каталог — в базу
   ```
 
   Закрытые на Картах заведения (`permanent-closed`, `temporary-closed`) скрипт не обновляет, а печатает
@@ -135,7 +174,6 @@ frontend/
 - **Документы:** сумма, дата и время вводятся вручную, распознавания пока нет. Введённые данные сверяются с программой: дата, выходные дни, часы работы, время по билету.
 - **Фото мест** — миниатюры из Википедии (нужен интернет), рестораны и отели — ссылками «рядом на Яндекс Картах», пока нет данных Яндекса.
 - **Сервер на Starlette.** FastAPI построен на ней, поэтому перенос — замена `Route` на декораторы.
-- **SQLite вместо PostgreSQL.**
 
 ## Разбор пожеланий (YandexGPT или Claude)
 
@@ -172,7 +210,7 @@ frontend/
 `out`/`back` заполняют «Туда»/«Обратно» (и даты поездки), `stay` — «Где жить» (своя бронь), `event` — жёстко
 встаёт в программу дня: вечерние (с 17:00) как театр с ужином до него, дневные — местом с фиксированным началом,
 остальные места раскладываются вокруг (`plan_trip(raw, custom_places, events)`). Файлы до создания поездки лежат
-в `var/uploads/pending-<token>/`, при создании переносятся к своим пунктам документом «оплачено».
+в хранилище в папке `pending-<пользователь>-<token>/`, при создании переносятся к своим пунктам документом «оплачено».
 Фото и скриншоты (JPG, PNG) и сканы PDF без текстового слоя читает Yandex Vision OCR: `YANDEX_VISION_API_KEY`
 (сервисный аккаунт с ролью `ai.vision.user`, ключ с областью `yc.ai.vision.execute`), каталог — `YANDEX_FOLDER_ID`
 или `YANDEX_VISION_FOLDER_ID`. У скана из нескольких страниц синхронный OCR читает только первую.

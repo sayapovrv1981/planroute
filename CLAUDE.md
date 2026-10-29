@@ -5,12 +5,26 @@
 
 Общаемся с пользователем по-русски.
 
-## Запуск на этом сервере
+## База и запуск
+
+- Данные — в PostgreSQL (`DATABASE_URL`, без него — локальная база `manage.py devdb start`, порт 54329),
+  файлы документов — `app/storage.py` (диск или S3 по `STORAGE`). Схему меняем только миграцией Alembic
+  (`backend/migrations/`), подробно — README, раздел «База, файлы и запуск на сервере».
+- Каталог мест правим в `backend/data/*_places.json`, затем `manage.py import-catalog` и перезапуск сервера:
+  планировщик читает каталог из базы и держит его в памяти.
+- Тесты поднимают свой временный PostgreSQL (`tests/testdb.py`, импортируется первым в каждом тесте):
+  базу разработки и живую базу не трогают. Новый тест-файл тоже начинайте с `import testdb`.
+- На Mac (`/Users/ruslan/planroute`) systemd нет: сервер — `bash scripts/run.sh` или F5 в VS Code.
+
+## Запуск на прежнем сервере (systemd)
+
+- До выкладки версии с PostgreSQL на сервере: `manage.py devdb start` (или свой PostgreSQL и `DATABASE_URL`),
+  `manage.py setup`, `manage.py sqlite-to-pg` (аккаунты и поездки из `var/trips.sqlite3`), затем перезапуск службы.
 
 - Сервер работает как systemd-служба `tripplan` (`/etc/systemd/system/tripplan.service`):
   uvicorn с `--reload` на `127.0.0.1:8000`, запускается при загрузке системы и перезапускается при падении.
-  - `systemctl restart tripplan` — после правок в `backend/.env` и каталоге `backend/data/*.json`
-    (`--reload` следит только за `.py`, а каталог кешируется в памяти)
+  - `systemctl restart tripplan` — после правок в `backend/.env`, а после правки каталога `backend/data/*.json` —
+    сначала `manage.py import-catalog` (`--reload` следит только за `.py`, а каталог кешируется в памяти)
   - каталоги `backend/data/*_places.json` хранятся с отступом в 1 пробел и без перевода строки в конце — сохраняйте так же
   - `systemctl status tripplan`, `journalctl -u tripplan -f` — состояние и логи
 - Не запускайте второй uvicorn вручную или фоновой задачей: порт 8000 занят службой.
@@ -28,9 +42,9 @@
 - Если пользователь говорит «не работает», а тесты проходят, сначала проверьте в `journalctl -u tripplan`,
   какие запросы на самом деле шлёт браузер: возможно, у него старый `app.js`. Сервер отдаёт фронтенд
   с `Cache-Control: no-cache` (`FrontFiles` в `main.py`), но вкладку, открытую до пересборки, нужно обновить.
-- Тесты: `cd backend && .venv/bin/python -m unittest discover -s tests`
+- Тесты: `cd backend && .venv/bin/python -m unittest discover -s tests` (сами поднимают временный PostgreSQL)
 - Проверка в браузере: `cd backend && .venv/bin/python tests/e2e_smoke.py <папка_скриншотов>` — поднимает свой сервер
-  на свободном порту с временной базой и без платных ключей; живой сервер на :8000 не трогает.
+  на свободном порту с временной базой PostgreSQL и без платных ключей; живой сервер на :8000 не трогает.
 - Проверка типов: `cd frontend && npx tsc --noEmit`. Ошибка про `./styles.css` в `main.tsx` была и раньше, её можно не учитывать.
 
 ## Договорённости

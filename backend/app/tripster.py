@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import catalog, net, store
+from . import catalog, config, net
 
 BASE = "https://experience.tripster.ru"
 TTL = 24 * 3600
@@ -123,7 +123,7 @@ def short(x: dict) -> dict:
 # --------------------------------------------------------------- cache
 
 def _disk(key: str) -> Path:
-    return store.BASE / "tripster" / (re.sub(r"[^\w-]+", "_", key.lower()) + ".json")
+    return config.get().data_dir / "tripster" / (re.sub(r"[^\w-]+", "_", key.lower()) + ".json")
 
 
 def _refresh(key: str, city: str) -> None:

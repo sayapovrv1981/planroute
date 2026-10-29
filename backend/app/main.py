@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import contextlib
 import copy
-import os
+import mimetypes
 import re
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -20,21 +21,9 @@ from starlette.middleware import Middleware
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import address, auth, bookings, catalog, planner, schedule, store, sutochno, tripster, wishes_ai, yandexmaps
-
-
-def _load_env_file() -> None:
-    """backend/.env: строки КЛЮЧ=значение (например DADATA_API_KEY). Переменные окружения важнее."""
-    env = Path(__file__).resolve().parent.parent / ".env"
-    if env.is_file():
-        for line in env.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-
-
-_load_env_file()
+from . import config  # noqa: F401 — первым: читает backend/.env до остальных модулей
+from . import (address, auth, bookings, catalog, db, limits, planner, schedule, store, sutochno, tripster, wishes_ai,
+               yandexmaps)
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -157,6 +146,15 @@ def describe(ctx: planner.Ctx, pid: str) -> dict:
 
 
 async def health(request: Request) -> JSONResponse:
+    """Для проверки контейнера: отвечает 503, пока недоступна база."""
+    def ping() -> None:
+        with db.tx() as con:
+            db.q(con, "select 1")
+    try:
+        await run_in_threadpool(ping)
+    except Exception as e:
+        print(f"[health] база недоступна: {type(e).__name__}: {e}", flush=True)
+        return JSONResponse({"ok": False, "error": "База недоступна"}, status_code=503)
     return JSONResponse({"ok": True})
 
 
@@ -320,8 +318,8 @@ def attach_bookings(tid: str, trip: dict, tickets: list[dict], uid: int) -> bool
             if key in adopted:  # тот же PDF с несколькими билетами — каждому пункту своя копия файла
                 if adopted[key] in [x["name"] for x in (target.get("doc") or {}).get("files", [])]:
                     continue
-                src = store.file_path(tid, adopted[key])
-                name = store.save_file(tid, src.name, src.read_bytes()) if src else None
+                content = store.read_file(tid, adopted[key])
+                name = store.save_file(tid, adopted[key], content) if content is not None else None
             else:
                 name = adopted[key] = store.adopt_pending(*key, tid, uid)
         files = [{"name": name, "filename": str(f.get("filename") or name)}] if name else []
@@ -641,24 +639,35 @@ async def detach_doc(request: Request) -> JSONResponse:
     return JSONResponse(present(tid, trip))
 
 
+def file_response(request: Request, name: str, content: bytes) -> Response:
+    """Файл документа из хранилища; имя для сохранения — как у загруженного (?filename=), ?download — скачать."""
+    headers = {"Cache-Control": "private, max-age=0"}
+    filename = request.query_params.get("filename") or None
+    if filename:  # так же, как FileResponse у Starlette: не-ASCII имя — по RFC 5987
+        kind = "attachment" if "download" in request.query_params else "inline"
+        quoted = quote(filename)
+        headers["Content-Disposition"] = (f"{kind}; filename*=utf-8''{quoted}" if quoted != filename
+                                          else f'{kind}; filename="{filename}"')
+    return Response(content, media_type=mimetypes.guess_type(name)[0] or "application/octet-stream", headers=headers)
+
+
 async def get_file(request: Request) -> Response:
-    tid = request.path_params["tid"]
-    p = store.file_path(tid, request.path_params["name"]) if store.owns(tid, request.state.user["id"]) else None
-    if not p:
+    tid, name = request.path_params["tid"], request.path_params["name"]
+    content = (await run_in_threadpool(store.read_file, tid, name)
+               if await run_in_threadpool(store.owns, tid, request.state.user["id"]) else None)
+    if content is None:
         raise HTTPException(404, "Файл не найден")
-    return FileResponse(p, filename=request.query_params.get("filename") or None,
-                        content_disposition_type="attachment" if "download" in request.query_params else "inline")
+    return file_response(request, name, content)
 
 
 async def get_pending_file(request: Request) -> Response:
     """Билет, загруженный в форме, пока поездка не создана."""
-    token = request.path_params["token"]
+    token, name = request.path_params["token"], request.path_params["name"]
     folder = store.pending_dir(request.state.user["id"], token)  # только свои: папка с номером пользователя
-    p = store.file_path(folder, request.path_params["name"]) if folder else None
-    if not p:
+    content = await run_in_threadpool(store.read_file, folder, name) if folder else None
+    if content is None:
         raise HTTPException(404, "Файл не найден — загрузите билет ещё раз")
-    return FileResponse(p, filename=request.query_params.get("filename") or None,
-                        content_disposition_type="attachment" if "download" in request.query_params else "inline")
+    return file_response(request, name, content)
 
 
 async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
@@ -734,7 +743,7 @@ class RequireLogin:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["path"].startswith("/api/") and scope["path"] not in PUBLIC_API:
             request = Request(scope)
-            user = auth.session_user(request.cookies.get(auth.COOKIE))
+            user = await run_in_threadpool(auth.session_user, request.cookies.get(auth.COOKIE))
             if not user:
                 await err(401, "Войдите в аккаунт")(scope, receive, send)
                 return
@@ -742,5 +751,6 @@ class RequireLogin:
         await self.app(scope, receive, send)
 
 
+# снаружи внутрь: размер запроса, вход, частота (правила частоты знают пользователя)
 app = Starlette(routes=routes, exception_handlers={HTTPException: http_error}, lifespan=lifespan,
-                middleware=[Middleware(RequireLogin)])
+                middleware=[Middleware(limits.BodyLimit), Middleware(RequireLogin), Middleware(limits.RateLimit)])

@@ -1,3 +1,4 @@
+import testdb  # noqa: F401 — первым: временный PostgreSQL вместо настоящей базы
 import json
 import os
 import unittest

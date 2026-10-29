@@ -1,4 +1,5 @@
 """Подсказки адресов: разбор ответов DaData и Photon, оценка дороги до вокзала, работа без сети."""
+import testdb  # noqa: F401 — первым: временный PostgreSQL вместо настоящей базы
 import json
 import os
 import unittest

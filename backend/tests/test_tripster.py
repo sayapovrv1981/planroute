@@ -1,3 +1,4 @@
+import testdb  # noqa: F401 — первым: временный PostgreSQL вместо настоящей базы
 import json
 import os
 import tempfile
@@ -5,7 +6,7 @@ import unittest
 import urllib.error
 from unittest import mock
 
-from app import catalog, store, tripster
+from app import catalog, tripster
 
 
 def exp(i, title, tagline="", minutes=90, rating=4.8, reviews=10, unit="за одного", fmt="experience", kids=True):
@@ -53,7 +54,7 @@ class FakeApi:
 @mock.patch.dict(os.environ, {"TRIPSTER_PARTNER": "planroute", "TRIPSTER_SECRET": "s3cret"})
 class TripsterTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = mock.patch.object(store, "BASE", __import__("pathlib").Path(tempfile.mkdtemp()))
+        self.tmp = mock.patch.dict(os.environ, {"SH_DATA_DIR": tempfile.mkdtemp()})  # свой кеш на диске
         self.tmp.start()
         tripster._cache.clear()
         tripster._token = None

@@ -1,4 +1,5 @@
 """Расписание: разбор ответа API Яндекс.Расписаний, поиск по номеру, работа без ключа."""
+import testdb  # noqa: F401 — первым: временный PostgreSQL вместо настоящей базы
 import os
 import unittest
 from unittest import mock

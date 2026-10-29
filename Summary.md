@@ -1,104 +1,93 @@
-# Своим ходом (tripplan) — состояние на 2026-10-29
+# Своим ходом (tripplan) — состояние на 2026-10-29 (вечер)
 
-Передача контекста в новый чат. Устройство проекта и API подробно — в `README.md`, правила работы на
-сервере — в `CLAUDE.md`, план этапов — в памяти (`roadmap.md`). Здесь только итог последней сессии.
+Передача контекста в новый чат. Устройство проекта и API подробно — в `README.md`, правила работы —
+в `CLAUDE.md`, план этапов — в памяти прежнего сервера (`roadmap.md`, в репозитории его нет). Здесь только итог
+последних сессий.
 
 ## 1. Архитектура и структура
 
-Монолит: Python-бэкенд на Starlette отдаёт и API, и собранный фронтенд; данные — SQLite и JSON-каталоги.
+Монолит: Python-бэкенд на Starlette отдаёт и API, и собранный фронтенд. Данные — PostgreSQL (аккаунты, поездки,
+каталог мест), файлы документов — на диске или в S3. Главная копия каталога — JSON в git, в базу его загружает
+`manage.py import-catalog`.
 
 ```
 backend/
-  app/planner.py      1804 стр. — ядро: каркас дня, отбор мест, пересчёт времени, бюджет, пункты программы
-  app/main.py          744 стр. — HTTP API (Starlette Route), раздача фронтенда (FrontFiles, no-cache), RequireLogin
-  app/catalog.py                 — каталоги городов из data/*_places.json, haversine_km, maps_link
-  app/auth.py                    — почта+пароль (scrypt), сессия в cookie sh_session, сброс пароля
-  app/store.py                   — поездки в SQLite, файлы документов в backend/var/
-  app/yandexmaps.py              — кафе по ссылке с Яндекс Карт: <script class="state-view"> → место
-  app/sutochno.py, tripster.py, schedule.py, prices.py, address.py, bookings.py, wishes_ai.py, mailer.py, net.py
-  data/{spb,kazan,nnovgorod,kaliningrad}_places.json — черновые каталоги (indent=1, без \n в конце!)
-  tools/yandex_facts.py          — НОВОЕ, не в git: рейтинг и часы заведений из Яндекс Карт в каталог
-  tests/                         — 118 юнит-тестов + e2e_smoke.py (Playwright, свой сервер и БД)
-frontend/src/
-  main.tsx            роутер (path → страница), UserContext, /api/auth/me при старте
-  nav.tsx             Logo, UserMenu (имя — ссылка на /account), navigate()
-  AccountPages.tsx    LoginPage, ResetPage, MyTripsPage, AccountPage, ChangePassword
-  FormPage.tsx        1633 стр. — форма новой поездки
-  TripPage.tsx         835 стр. — программа по часам, документы, бюджет
-  Picks.tsx           список вариантов «Заменить» (поиск, рейтинг, расстояние)
-  styles.css          один файл, без фреймворка
+  app/planner.py      ядро: каркас дня, отбор мест, пересчёт времени, бюджет, пункты программы
+  app/main.py         HTTP API (Starlette Route), раздача фронтенда, RequireLogin, /api/health с проверкой базы
+  app/config.py       НОВОЕ — настройки сервера из env (+ чтение backend/.env): DATABASE_URL, STORAGE, S3_*, лимиты
+  app/db.py           НОВОЕ — SQLAlchemy Core + psycopg 3, таблицы users, sessions, resets, trips, cities, places
+  app/storage.py      НОВОЕ — LocalStorage (var/uploads) и S3Storage (boto3), ключ «папка/имя»
+  app/limits.py       НОВОЕ — BodyLimit (413) и RateLimit (429, счётчики в памяти процесса)
+  app/catalog.py      каталог из таблиц cities/places (lru_cache), import_json() из data/*_places.json
+  app/store.py        поездки в PostgreSQL, файлы через storage
+  app/auth.py         почта+пароль (scrypt), сессия в cookie sh_session, сброс пароля
+  manage.py           НОВОЕ — devdb start|stop|status, migrate, import-catalog, setup, sqlite-to-pg, files-to-s3
+  migrations/         НОВОЕ — Alembic, 0001_initial
+  tools/devpg.py      НОВОЕ — PostgreSQL 16 из колеса pgserver (PyPI) без установки в систему
+  tools/yandex_facts.py  рейтинг и часы заведений из Яндекс Карт
+  data/*_places.json  черновые каталоги (indent=1, без \n в конце!)
+  tests/              129 юнит-тестов + e2e_smoke.py; tests/testdb.py — временный PostgreSQL на прогон
+frontend/src/         без изменений в этой сессии (см. README)
+Dockerfile, docker-compose.yml, .dockerignore   НОВОЕ — образ приложения, compose: app + postgres (+ minio)
 ```
 
 Роутинг фронтенда — по `window.location.pathname`: `/` форма, `/trip/<id>`, `/trips`, `/account`, `/login`, `/reset`.
 Всё под `/api/` требует входа (`RequireLogin`, исключения в `PUBLIC_API`), поездки — только владельцу.
 
-Запуск: systemd-служба `tripplan`, uvicorn `--reload` на `127.0.0.1:8000`, второй uvicorn не поднимать.
-Фронтенд после правок — `cd frontend && npm run build`.
+## 2. Где идёт работа
 
-## 2. Что сделано в последних сессиях
+С этой сессии — на Mac пользователя: `/Users/ruslan/planroute`, Python 3.15, Node 26, нет Docker, Homebrew и
+системного PostgreSQL. Окружение: `backend/.venv`, база разработки `manage.py devdb start` (порт 54329,
+`backend/var/postgres`), сервер — `bash scripts/run.sh` или F5 в VS Code (задача «Перед запуском» поднимает базу).
+Локальные аккаунт и 2 поездки пользователя перенесены из SQLite в PostgreSQL (`manage.py sqlite-to-pg`).
 
-Коммиты на `main` (запушены в sayapovrv1981/planroute):
+**Push в GitHub с Mac не настроен** (нет учётных данных git, нет `gh`): коммиты ниже локальные.
 
-- `18a5c3e` — рейтинг Яндекса и часы работы в описании у всех заведений, подробно в разделе 3.
-- `babae1c` — карточка пользователя вынесена со страницы «Мои поездки» в отдельную страницу `/account`.
-  Имя в шапке стало ссылкой ([nav.tsx:40-69](frontend/src/nav.tsx#L40-L69)), `AccountPage` в
-  [AccountPages.tsx:384-424](frontend/src/AccountPages.tsx#L384-L424), маршрут в [main.tsx](frontend/src/main.tsx),
-  в `e2e_smoke.py` проверка переехала на новую страницу (скриншот `6-account.png`).
-- `e27f1c6` — поля «Текущий пароль» / «Новый пароль» в столбик (убран `div.row`), ширину полям задаёт
-  `.account-pw .field`: при `align-items: flex-start` они сжимались до ширины подписи.
-- `c45763a` — форма смены пароля плотнее: `gap` 10px, подпись 4px, поле 44px, подсказка 13px
-  ([styles.css:309-314](frontend/src/styles.css#L309-L314)).
+## 3. Что сделано в этой сессии
 
-Проверено: 120 unit-тестов + `e2e_smoke.py` проходят, фронтенд собран.
+Коммит `ce0eaca` — данные заведений (пункт 1 прошлого плана):
+- `f_singer`: «ЗингерЪ» на Картах закрыт навсегда, кафе в Доме Зингера теперь «Рене» (Невский, 28) — переименовано.
+- `f_vasilyevsky2`: координаты были в 600 м от адреса (поэтому поиск в радиусе 400 м его не находил) — исправлены.
+- Казань: `f_tubetey`, `f_usadba` — ymaps_id, точные координаты, рейтинг и часы.
+- Найдены ещё два закрытых навсегда, хотя рейтинг у них был: `f_stolle_kon` (Конюшенный пер., 1/6) и `f_petrograd`
+  (Большой П. С., 64) — заменены на ближайшие открытые «Штолле» (Невский, 11) и «Теремок» (Льва Толстого, 1-3).
+- `yandex_facts.py`: печатает «! … закрыто» вместо обновления, повторяет запрос при ошибке Карт (лимит частоты).
 
-## 3. Рейтинг и часы у заведений (закрыто, `18a5c3e`)
+Коммит этапа C.0 (кроме VPS и домена):
+- PostgreSQL вместо SQLite. Тип колонок данных — `json`, не `jsonb`: jsonb переставляет ключи объектов, а порядок
+  ключей в поездке и каталоге мог влиять на вывод. Время — `timestamptz`.
+- Регистрация берёт `lock table users`: иначе две одновременные могли обе стать «первым пользователем».
+  `reset_password` помечает ссылку использованной условием `used is null` — одна ссылка не сработает дважды.
+- Каталог в БД: ключ города — прежнее имя файла (`spb_places.json`), порядок мест — колонка `pos`.
+  Каталог из базы сверен с JSON побайтно.
+- Файлы: `store.read_file` вместо `file_path`, отдача через `Response` с тем же Content-Disposition, что у FileResponse.
+- Лимиты: файл 15 МБ, запрос с файлами 60 МБ, без файлов 512 КБ; частота — правила `limits.RULES`.
+- Docker: образ на python:3.12-slim, при старте `manage.py setup`, uvicorn одним процессом с `--proxy-headers`.
+  **Docker-файлы не проверены сборкой** — на Mac нет Docker. YAML compose синтаксически читается.
 
-В описании пункта с едой теперь всегда и рейтинг Яндекса, и часы работы. Хвост описания собирает
-[planner.py:590-612](backend/app/planner.py#L590-L612) `food_item` из полей места: чек → своё описание →
-`rating_text` (`rating`/`reviews` → «★ 5,0 на Яндекс Картах (10154)») → `hours_text` (`hours` → «Работает
-09:00–00:00, пт и сб до 01:00», выходные из `closed`, разное закрытие по дням из `late`). У заглушек
-(`placeholder`) `hours_text` молчит: их часы — ориентир для подбора, а не настоящие.
-
-Из `yandexmaps.parse` рейтинг в `note` убран, чтобы не дублировался, добавлено поле `reviews`; в «Заменить»
-часы идут в `meta` ([main.py:116-117](backend/app/main.py#L116-L117)), рейтинг `Picks` рисует из поля `rating` —
-теперь оно есть и у каталожных мест, так что `by_rating_and_distance` сортирует по настоящим данным.
-
-Попутно исправлен дефект: `opening` при закрытии после полуночи («09:00–01:00») возвращала пустой интервал,
-то есть «закрыто весь день» ([planner.py:411-415](backend/app/planner.py#L411-L415)).
-
-Данные: в `data/spb_places.json` вписаны `ymaps_id` 11 заведений и прогнан `tools/yandex_facts.py --write`
-(скрипт закоммичен, описан в README). Устаревшие приписки в `note` («часы уточните», «в выходные с 9:00
-до 21:00») убраны там, где настоящие часы пришли с Карт.
-
-Тесты: 120 проходят, добавлены `test_food_note_has_rating_and_hours` и `test_hours_text`.
-`test_budget_tolerance` переписан: жёсткая сумма 58 000 зависела от того, какие места выберет планировщик,
-теперь лимит считается от стоимости готовой поездки.
-
-Осталось: `f_singer` (по адресу Карты отдают «Рене», Невский 28 — проверить, то ли это), `f_vasilyevsky2`
-(Штолле на 1-й линии В. О. поиск рядом не нашёл) и 2 реальных заведения Казани (`f_tubetey`, `f_usadba`).
-В Калининграде и Н. Новгороде все заведения — заглушки, рейтинга у них быть не может.
+Проверено: 129 юнит-тестов (9 новых в `test_infra.py`: хранилище на диске и в S3 через moto, лимиты, импорт каталога,
+перенос из SQLite) и `e2e_smoke.py` проходят на PostgreSQL.
 
 ## 4. Стек
 
-- **Backend:** Python 3.11+, Starlette, uvicorn (`--reload`, systemd), SQLite, python-multipart, pypdf,
-  certifi; внешние сервисы — YandexGPT (разбор пожеланий, по умолчанию), Yandex Vision OCR (билеты),
-  DaData или Photon (адреса), Трипстер API 2.0, Суточно.ру и Яндекс Карты парсингом страниц, SMTP reg.ru.
-- **Frontend:** React 19 + TypeScript 6, сборка esbuild (`build.mjs` → `dist/assets/app.js`, `app.css`),
-  без роутера и UI-библиотек, свой `styles.css`.
-- **Тесты:** unittest (118), Playwright + Chromium в `backend/.venv` (`tests/e2e_smoke.py`).
-- Ключи и настройки — `backend/.env` (образец `.env.example`), после правки `systemctl restart tripplan`.
+- **Backend:** Python 3.11+, Starlette, uvicorn, PostgreSQL 16 (SQLAlchemy Core 2, psycopg 3, Alembic), boto3,
+  python-multipart, pypdf, certifi; внешние сервисы — YandexGPT, Yandex Vision OCR, DaData или Photon,
+  Трипстер API 2.0, Суточно.ру и Яндекс Карты парсингом страниц, SMTP reg.ru.
+- **Frontend:** React 19 + TypeScript 6, esbuild (`build.mjs` → `dist/assets/app.js`, `app.css`).
+- **Тесты:** unittest (129), moto для S3, Playwright + Chromium (`tests/e2e_smoke.py`).
+- Ключи и настройки — `backend/.env` (образец `.env.example`, в конце — новые настройки сервера).
 
-Команды проверки: `cd backend && .venv/bin/python -m unittest discover -s tests`,
-`.venv/bin/python tests/e2e_smoke.py <папка>`, `cd frontend && npx tsc --noEmit`
-(ошибка про `./styles.css` в `main.tsx` была и раньше).
+Команды проверки (из `backend`): `.venv/bin/python -m unittest discover -s tests`,
+`.venv/bin/python tests/e2e_smoke.py <папка>`, `cd ../frontend && npx tsc --noEmit`.
 
 ## 5. Следующие шаги
 
-1. Разобраться с `f_singer` и `f_vasilyevsky2`; то же для Казани, а Калининград и Н. Новгород — только после
-   появления реальных заведений вместо заглушек (раздел 3).
-2. По плану (`roadmap.md`) ближайшее — **этап C.0**: настройки из env, PostgreSQL вместо SQLite (Alembic),
-   документы в S3, каталог мест в БД, Docker + compose, лимиты загрузки и rate limit; затем VPS в России,
-   домен, nginx + Let's Encrypt.
-3. Из незакрытого по данным: проверка каталогов Казани, Н. Новгорода, Калининграда; ночные поезда
-   (прибытие на следующие сутки); сезонность (`months`); часовые пояса городов.
-4. Этап B: черновики карточек мест моделью, объяснение выбора мест, правка программы словами.
+1. Настроить push в GitHub с Mac (токен или SSH-ключ) и отправить локальные коммиты.
+2. Проверить Docker-сборку там, где есть Docker (`docker compose up -d --build`), и бакет Yandex Object Storage
+   (`STORAGE=s3`, сервисный аккаунт с ролью storage.editor).
+3. Остаток этапа C.0: VPS в России, домен, nginx + Let's Encrypt; перенос данных с прежнего сервера —
+   `sqlite-to-pg` и `files-to-s3` (порядок — в комментарии `docker-compose.yml` и в CLAUDE.md).
+   Rate limit в памяти — при нескольких процессах перенести в Redis или nginx `limit_req`.
+4. Данные: Калининград и Н. Новгород — только заглушки заведений; ночные поезда, сезонность (`months`),
+   часовые пояса городов. Все настоящие заведения СПб и Казани уже сверены с Картами.
+5. Этап B: черновики карточек мест моделью, объяснение выбора мест, правка программы словами.

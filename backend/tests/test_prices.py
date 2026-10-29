@@ -1,4 +1,5 @@
 """Цены для списка рейсов: Туту.ру (поезда) и Авиасейлс (самолёты), без сети."""
+import testdb  # noqa: F401 — первым: временный PostgreSQL вместо настоящей базы
 import os
 import unittest
 from unittest import mock

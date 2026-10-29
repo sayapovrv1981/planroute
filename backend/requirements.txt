@@ -4,3 +4,7 @@ python-multipart>=0.0.9
 certifi>=2024.2
 anthropic>=2.3
 pypdf>=5
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.2
+boto3>=1.34
