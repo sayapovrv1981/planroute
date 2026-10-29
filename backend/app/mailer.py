@@ -69,3 +69,20 @@ def send_password_reset(to: str, name: str, token: str, hours: int) -> bool:
             f"Ссылка работает {hours} ч и только один раз. Если пароль вы не забывали — просто удалите письмо, "
             f"старый пароль продолжает работать.\n")
     return send(to, "Новый пароль в «Своим ходом»", text)
+
+
+if __name__ == "__main__":  # проверка настроек: .venv/bin/python -m app.mailer кому@почта.ru
+    import sys
+
+    from . import main  # noqa: F401  — читает backend/.env
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if len(sys.argv) != 2:
+        print("Кому слать пробное письмо? .venv/bin/python -m app.mailer адрес@почта.ru")
+        raise SystemExit(2)
+    cfg = _settings()
+    print(f"SMTP: {cfg['host']}:{cfg['port']}, от {cfg['sender']}" if cfg else
+          "SMTP не настроен (SMTP_HOST, SMTP_USER, SMTP_PASSWORD в backend/.env) — письмо уйдёт в журнал")
+    ok = send(sys.argv[1], "Проверка почты «Своим ходом»",
+              f"Письма настроены верно.\nСсылки в письмах будут вести на {app_url()}\n")
+    raise SystemExit(0 if ok else 1)
