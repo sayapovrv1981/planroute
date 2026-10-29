@@ -8,6 +8,7 @@ import time
 import unittest
 import urllib.request
 import uuid
+from unittest import mock
 
 os.environ["SH_DATA_DIR"] = tempfile.mkdtemp(prefix="sh-test-")
 # Ключи из backend/.env не должны превращать тесты в платные запросы к моделям (.env не перекрывает заданное)
@@ -17,6 +18,7 @@ for _k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "YANDEX_GPT_API_KEY", "Y
 
 import uvicorn  # noqa: E402
 
+from app import mailer  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -296,6 +298,34 @@ class ApiTest(unittest.TestCase):
         # удалить свою
         self.assertEqual(self.call("DELETE", f"/api/trips/{tid}")[0], 200)
         self.assertEqual(self.call("GET", f"/api/trips/{tid}")[0], 404)
+
+    def test_forgot_password(self):
+        email = f"forgot-{uuid.uuid4().hex[:8]}@example.ru"
+        self.signup(email)
+        sent = []
+        with mock.patch.object(mailer, "send", lambda to, subject, text: sent.append(text) or True):
+            # без входа; на незнакомую почту ответ такой же, письма нет
+            self.assertEqual(self.call("POST", "/api/auth/forgot", {"email": "no-one@example.ru"}, cookie="")[0], 200)
+            self.assertEqual(sent, [])
+            self.assertEqual(self.call("POST", "/api/auth/forgot", {"email": email}, cookie="")[0], 200)
+            self.assertEqual(self.call("POST", "/api/auth/forgot", {"email": "не почта"}, cookie="")[0], 422)
+        self.assertEqual(len(sent), 1)
+        token = sent[0].split("/reset?token=")[1].split()[0]
+
+        status, body = self.call("GET", f"/api/auth/reset?token={token}", cookie="")
+        self.assertEqual((status, body["user"]["email"]), (200, email))
+        self.assertEqual(self.call("GET", "/api/auth/reset?token=no-such-token", cookie="")[0], 404)
+        self.assertEqual(self.call("POST", "/api/auth/reset", {"token": token, "password": "123"}, cookie="")[0], 422)
+
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/auth/reset", method="POST",
+                                     data=json.dumps({"token": token, "password": "brand-new-pass"}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as r:  # после сброса сразу вошли
+            fresh = r.headers["Set-Cookie"].split(";")[0]
+        self.assertEqual(self.call("GET", "/api/trips", cookie=fresh)[0], 200)
+        self.assertEqual(self.call("POST", "/api/auth/login", {"email": email, "password": "brand-new-pass"}, cookie="")[0], 200)
+        self.assertEqual(self.call("POST", "/api/auth/login", {"email": email, "password": "secret-pass-1"}, cookie="")[0], 401)
+        self.assertEqual(self.call("GET", f"/api/auth/reset?token={token}", cookie="")[0], 404)  # ссылка одноразовая
 
     def test_errors(self):
         status, body = self.call("POST", "/api/trips", {"city": "Урюпинск"})

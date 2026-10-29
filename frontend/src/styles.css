@@ -282,6 +282,26 @@ textarea { height: auto; padding: 12px 14px; resize: vertical; }
 .auth-hero { padding-bottom: 70px; }
 .auth-wrap { margin-top: -50px; display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
 .auth-card { max-width: 460px; }
+
+/* вход и регистрация: узкая колонка по центру, поля в один столбец */
+.auth-page .auth-hero { padding-top: 26px; padding-bottom: 56px; align-items: center; text-align: center; }
+.auth-page .auth-hero h1 { font-size: clamp(26px, 3vw, 34px); }
+.auth-page .auth-hero p { font-size: 16px; max-width: 420px; }
+.auth-page .auth-wrap { max-width: 420px; }
+.auth-page .auth-card { max-width: none; gap: 16px; padding: 24px; }
+.auth-card .chips { justify-content: center; }
+.auth-card .seg { flex: 1 1 0; min-width: 0; }
+.auth-card .field { flex: 1 1 100%; }
+.auth-card .field .hint { font-size: 13px; }
+.pw { position: relative; display: block; }
+.pw input { padding-right: 96px; }
+.pw-eye { position: absolute; right: 6px; top: 6px; height: 38px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--soft); color: var(--ink-2); font-size: 14px; font-weight: 700; cursor: pointer; }
+.pw-eye:hover { background: var(--accent-soft); color: var(--accent-dark); }
+.link-btn { align-self: center; background: none; border: 0; padding: 4px; color: var(--accent); font-weight: 700; font-size: 15px; cursor: pointer; }
+.link-btn:hover { color: var(--accent-dark); text-decoration: underline; }
+@media (max-width: 640px) {
+  .pw input { padding-right: 90px; }
+}
 .trips-head { justify-content: space-between; align-items: center; }
 .trips-head h2, .card h2 { margin: 0; font-size: 20px; }
 .as-button { display: inline-flex; align-items: center; text-decoration: none; }

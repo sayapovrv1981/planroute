@@ -432,6 +432,29 @@ async def auth_me(request: Request) -> JSONResponse:
     return JSONResponse({"user": user}) if user else err(401, "Войдите в аккаунт")
 
 
+async def auth_forgot(request: Request) -> JSONResponse:
+    """Письмо со ссылкой на новый пароль. Отвечаем одинаково, есть такая почта или нет."""
+    body = await _json(request)
+    try:
+        await run_in_threadpool(auth.request_reset, str(body.get("email") or ""))
+    except ValueError as e:
+        return err(422, str(e))
+    return JSONResponse({"ok": True})
+
+
+async def auth_reset(request: Request) -> JSONResponse:
+    """GET — годна ли ссылка из письма, POST — задать новый пароль и сразу войти."""
+    if request.method == "GET":
+        user = await run_in_threadpool(auth.reset_user, request.query_params.get("token") or "")
+        return JSONResponse({"user": user}) if user else err(404, "Ссылка устарела — запросите письмо заново")
+    body = await _json(request)
+    try:
+        user = await run_in_threadpool(auth.reset_password, str(body.get("token") or ""), str(body.get("password") or ""))
+    except ValueError as e:
+        return err(422, str(e))
+    return _session_response({"user": user}, request, auth.new_session(user["id"]))
+
+
 async def auth_password(request: Request) -> JSONResponse:
     body = await _json(request)
     uid = request.state.user["id"]
@@ -662,6 +685,8 @@ routes = [
     Route("/api/auth/login", auth_login, methods=["POST"]),
     Route("/api/auth/logout", auth_logout, methods=["POST"]),
     Route("/api/auth/me", auth_me),
+    Route("/api/auth/forgot", auth_forgot, methods=["POST"]),
+    Route("/api/auth/reset", auth_reset, methods=["GET", "POST"]),
     Route("/api/auth/password", auth_password, methods=["POST"]),
     Route("/api/meta", meta),
     Route("/api/stays", stays),
@@ -693,7 +718,8 @@ async def lifespan(_app: Starlette):
     yield
 
 
-PUBLIC_API = {"/api/health", "/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/me"}
+PUBLIC_API = {"/api/health", "/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/me",
+              "/api/auth/forgot", "/api/auth/reset"}
 
 
 class RequireLogin:

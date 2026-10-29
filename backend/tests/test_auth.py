@@ -61,6 +61,46 @@ class AuthTest(unittest.TestCase):
         self.assertIsNone(auth.session_user(t1))
         self.assertEqual(auth.login("u@mail.ru", "new-secret-1")["id"], u["id"])
 
+    def test_password_reset(self):
+        u = auth.register("u@mail.ru", "secret-pass-1", "Юзер")
+        sent = []
+        with mock.patch.object(auth.mailer, "send", lambda to, subject, text: sent.append((to, text)) or True):
+            self.assertFalse(auth.request_reset("нет-такой@mail.ru"))  # чужой адрес — ответ тот же, письма нет
+            self.assertTrue(auth.request_reset("U@mail.ru "))
+            with self.assertRaises(ValueError):
+                auth.request_reset("не почта")
+            self.assertEqual(len(sent), 1)
+            self.assertEqual(sent[0][0], "u@mail.ru")
+            token = sent[0][1].split("/reset?token=")[1].split()[0]
+            with store._db() as con:  # в базе — только хеш токена
+                self.assertIsNone(con.execute("select 1 from resets where token = ?", (token,)).fetchone())
+            # пока не использован — ссылка годна и говорит, чей это аккаунт
+            self.assertEqual(auth.reset_user(token)["email"], "u@mail.ru")
+            self.assertIsNone(auth.reset_user("мусор"))
+            session = auth.new_session(u["id"])
+            with self.assertRaises(ValueError):
+                auth.reset_password(token, "short")
+            auth.reset_password(token, "new-secret-1")
+            self.assertIsNone(auth.session_user(session))  # прежние сессии закрыты
+            self.assertEqual(auth.login("u@mail.ru", "new-secret-1")["id"], u["id"])
+            self.assertIsNone(auth.reset_user(token))  # ссылка одноразовая
+            with self.assertRaises(ValueError):
+                auth.reset_password(token, "new-secret-2")
+            # просроченная ссылка не работает
+            auth.request_reset("u@mail.ru")
+            old = sent[-1][1].split("/reset?token=")[1].split()[0]
+            with store._db() as con:
+                con.execute("update resets set expires = '2000-01-01T00:00:00+00:00' where used is null")
+            self.assertIsNone(auth.reset_user(old))
+            # не чаще RESET_MAX писем в час
+            sent.clear()
+            with store._db() as con:
+                con.execute("delete from resets")
+            for _ in range(auth.RESET_MAX):
+                self.assertTrue(auth.request_reset("u@mail.ru"))
+            self.assertFalse(auth.request_reset("u@mail.ru"))
+            self.assertEqual(len(sent), auth.RESET_MAX)
+
 
 if __name__ == "__main__":
     unittest.main()

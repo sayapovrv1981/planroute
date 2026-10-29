@@ -32,6 +32,8 @@ def _db():
                     "name text not null, password text not null, created text not null)")
         con.execute("create table if not exists sessions (token text primary key, user_id integer not null, "
                     "created text not null, expires text not null)")
+        con.execute("create table if not exists resets (token text primary key, user_id integer not null, "
+                    "created text not null, expires text not null, used text)")
         yield con
         con.commit()
     finally:

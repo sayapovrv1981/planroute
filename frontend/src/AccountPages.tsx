@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Logo, navigate, UserContext, UserMenu } from "./nav";
 import type { User } from "./nav";
@@ -12,22 +12,233 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return j as T;
 }
 
-/** Вход и регистрация по почте и паролю; после — onDone с пользователем. */
+/** Поле с подписью и подсказкой под ним. Подсказка — рядом с полем, а не внутри подписи: иначе она
+ *  попадает в название поля для скринридера и для тестов. */
+function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string) => React.ReactNode }) {
+  const id = useId();
+  return (
+    <div className="field">
+      <label className="label" htmlFor={id}>
+        {label}
+      </label>
+      {children(id)}
+      {hint && <span className="hint">{hint}</span>}
+    </div>
+  );
+}
+
+/** Поле пароля с кнопкой «показать»: иначе опечатку в скрытом вводе не найти. */
+function PasswordField({ label, hint, value, onChange, autoComplete, min }: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete: "current-password" | "new-password";
+  min?: number;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <Field label={label} hint={hint}>
+      {(id) => (
+        <span className="pw">
+          <input
+            id={id}
+            type={shown ? "text" : "password"}
+            value={value}
+            minLength={min}
+            autoComplete={autoComplete}
+            onChange={(e) => onChange(e.target.value)}
+            required
+          />
+          <button type="button" className="pw-eye" aria-pressed={shown} onClick={() => setShown(!shown)}
+                  title={shown ? "Скрыть пароль" : "Показать пароль"}>
+            {shown ? "Скрыть" : "Показать"}
+          </button>
+        </span>
+      )}
+    </Field>
+  );
+}
+
+type Mode = "login" | "register" | "forgot";
+
+/** Вход, регистрация и письмо для забытого пароля; после входа — onDone с пользователем. */
 export function LoginPage({ onDone }: { onDone: (u: User) => void }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [sent, setSent] = useState("");
   const [busy, setBusy] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+
+  // переключили вкладку — поля пустые: чужие данные и подстановки браузера не должны оставаться
+  function go(m: Mode) {
+    setMode(m);
+    setError("");
+    setSent("");
+    setPassword("");
+    setName("");
+    if (m !== "login") setEmail("");
+    form.current?.reset();
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const body = mode === "login" ? { email, password } : { email, password, name };
-      const j = await post<{ user: User }>(`/api/auth/${mode}`, body);
+      if (mode === "forgot") {
+        await post("/api/auth/forgot", { email });
+        setSent(email);
+        setEmail("");
+      } else {
+        const body = mode === "login" ? { email, password } : { email, password, name };
+        const j = await post<{ user: User }>(`/api/auth/${mode}`, body);
+        setPassword("");
+        onDone(j.user);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+      setPassword("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="page auth-page">
+      <header className="top">
+        <div className="wrap top-bar">
+          <Logo />
+        </div>
+        <div className="wrap hero auth-hero">
+          <div className="eyebrow">Планировщик самостоятельных поездок</div>
+          <h1>{mode === "register" ? "Регистрация" : mode === "forgot" ? "Забыли пароль" : "Вход"}</h1>
+          <p>Поездки, билеты и брони хранятся в вашем аккаунте — их видите только вы.</p>
+        </div>
+      </header>
+      <main className="wrap auth-wrap">
+        <form className="card auth-card" onSubmit={submit} autoComplete={mode === "login" ? "on" : "off"} ref={form}>
+          <div className="chips" role="tablist" aria-label="Вход или регистрация">
+            {(["login", "register"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                className={`seg ${mode === m ? "on" : ""}`}
+                onClick={() => go(m)}
+              >
+                {m === "login" ? "Вход" : "Регистрация"}
+              </button>
+            ))}
+          </div>
+          {mode === "forgot" ? (
+            sent ? (
+              <>
+                <p className="hint ok" role="status">
+                  Письмо со ссылкой отправлено на {sent}. Ссылка работает 2 часа. Если письма нет через пару минут,
+                  посмотрите в папке «Спам».
+                </p>
+                <button type="button" className="primary" onClick={() => go("login")}>
+                  Вернуться ко входу
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="hint">Пришлём на почту ссылку, по которой можно задать новый пароль.</p>
+                <Field label="Почта аккаунта">
+                  {(id) => (
+                    <input id={id} type="email" value={email} placeholder="ivan@example.ru" autoComplete="email"
+                           onChange={(e) => setEmail(e.target.value)} required />
+                  )}
+                </Field>
+              </>
+            )
+          ) : (
+            <>
+              {mode === "register" && (
+                <Field label="Как к вам обращаться" hint="Имя увидите только вы — так подписываем приветствие.">
+                  {(id) => (
+                    <input id={id} value={name} placeholder="Иван" autoComplete="name" maxLength={80}
+                           onChange={(e) => setName(e.target.value)} required />
+                  )}
+                </Field>
+              )}
+              <Field label="Почта" hint={mode === "register" ? "На неё придёт ссылка, если забудете пароль." : undefined}>
+                {(id) => (
+                  <input id={id} type="email" value={email} placeholder="ivan@example.ru"
+                         autoComplete={mode === "login" ? "username" : "email"}
+                         onChange={(e) => setEmail(e.target.value)} required />
+                )}
+              </Field>
+              <PasswordField
+                label="Пароль"
+                hint={mode === "register" ? "Не короче 8 символов. Лучше не тот, что в других сервисах." : undefined}
+                value={password}
+                onChange={setPassword}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                min={mode === "register" ? 8 : undefined}
+              />
+            </>
+          )}
+          {error && (
+            <p className="hint warn" role="alert">
+              {error}
+            </p>
+          )}
+          {!(mode === "forgot" && sent) && (
+            <button type="submit" className="primary" disabled={busy}>
+              {busy ? "Подождите…" : mode === "login" ? "Войти" : mode === "register" ? "Создать аккаунт" : "Прислать ссылку"}
+            </button>
+          )}
+          {mode === "login" && (
+            <button type="button" className="link-btn" onClick={() => go("forgot")}>
+              Забыли пароль?
+            </button>
+          )}
+          {mode === "forgot" && !sent && (
+            <button type="button" className="link-btn" onClick={() => go("login")}>
+              Вспомнил, вернуться ко входу
+            </button>
+          )}
+          {mode === "register" && (
+            <p className="hint">Регистрируясь, вы соглашаетесь на хранение поездок и приложенных билетов в аккаунте.</p>
+          )}
+        </form>
+      </main>
+    </div>
+  );
+}
+
+/** Новый пароль по ссылке из письма (/reset?token=…): проверяем токен, задаём пароль и сразу входим. */
+export function ResetPage({ onDone }: { onDone: (u: User) => void }) {
+  const token = new URLSearchParams(window.location.search).get("token") || "";
+  const [owner, setOwner] = useState<User | null | undefined>(undefined); // undefined — ещё проверяем ссылку
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/auth/reset?token=${encodeURIComponent(token)}`)
+      .then((r) => (r.ok ? r.json() : { user: null }))
+      .then((j) => setOwner(j.user ?? null))
+      .catch(() => setOwner(null));
+  }, [token]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (password !== again) {
+      setError("Пароли не совпадают");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const j = await post<{ user: User }>("/api/auth/reset", { token, password });
       onDone(j.user);
     } catch (err) {
       setError((err as Error).message);
@@ -37,69 +248,48 @@ export function LoginPage({ onDone }: { onDone: (u: User) => void }) {
   }
 
   return (
-    <div className="page">
+    <div className="page auth-page">
       <header className="top">
         <div className="wrap top-bar">
           <Logo />
         </div>
         <div className="wrap hero auth-hero">
-          <div className="eyebrow">Планировщик самостоятельных поездок</div>
-          <h1>{mode === "login" ? "Вход" : "Регистрация"}</h1>
-          <p>Поездки, билеты и брони хранятся в вашем аккаунте — их видите только вы.</p>
+          <h1>Новый пароль</h1>
+          <p>{owner ? owner.email : "Ссылка из письма"}</p>
         </div>
       </header>
       <main className="wrap auth-wrap">
-        <form className="card auth-card" onSubmit={submit}>
-          <div className="chips" role="tablist" aria-label="Вход или регистрация">
-            {(["login", "register"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={mode === m}
-                className={`seg ${mode === m ? "on" : ""}`}
-                onClick={() => {
-                  setMode(m);
-                  setError("");
-                }}
-              >
-                {m === "login" ? "Вход" : "Регистрация"}
+        <form className="card auth-card" onSubmit={submit} autoComplete="off">
+          {owner === undefined && (
+            <p className="loading-line" role="status">
+              <span className="spinner" aria-hidden="true" /> Проверяем ссылку…
+            </p>
+          )}
+          {owner === null && (
+            <>
+              <p className="hint warn" role="alert">
+                Ссылка устарела или уже использована. Запросите письмо заново.
+              </p>
+              <button type="button" className="primary" onClick={() => navigate("/login")}>
+                К входу
               </button>
-            ))}
-          </div>
-          {mode === "register" && (
-            <label className="field">
-              <span className="label">Как к вам обращаться</span>
-              <input value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} required />
-            </label>
+            </>
           )}
-          <label className="field">
-            <span className="label">Почта</span>
-            <input type="email" value={email} autoComplete="email" onChange={(e) => setEmail(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span className="label">Пароль{mode === "register" ? " — не короче 8 символов" : ""}</span>
-            <input
-              type="password"
-              value={password}
-              minLength={mode === "register" ? 8 : undefined}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </label>
-          {error && (
-            <p className="hint warn" role="alert">
-              {error}
-            </p>
-          )}
-          <button type="submit" className="primary" disabled={busy}>
-            {busy ? "Подождите…" : mode === "login" ? "Войти" : "Создать аккаунт"}
-          </button>
-          {mode === "login" && (
-            <p className="hint">
-              Забыли пароль? Восстановление по почте появится позже — пока напишите администратору прототипа.
-            </p>
+          {owner && (
+            <>
+              <PasswordField label="Новый пароль" hint="Не короче 8 символов" value={password} onChange={setPassword}
+                             autoComplete="new-password" min={8} />
+              <PasswordField label="Ещё раз" value={again} onChange={setAgain} autoComplete="new-password" min={8} />
+              {error && (
+                <p className="hint warn" role="alert">
+                  {error}
+                </p>
+              )}
+              <button type="submit" className="primary" disabled={busy}>
+                {busy ? "Подождите…" : "Сохранить и войти"}
+              </button>
+              <p className="hint">На других устройствах придётся войти заново.</p>
+            </>
           )}
         </form>
       </main>
@@ -214,14 +404,9 @@ function ChangePassword({ onSessionRenewed }: { onSessionRenewed: () => void }) 
     >
       <h2>Сменить пароль</h2>
       <div className="row">
-        <label className="field">
-          <span className="label">Текущий пароль</span>
-          <input type="password" value={old} autoComplete="current-password" onChange={(e) => setOld(e.target.value)} required />
-        </label>
-        <label className="field">
-          <span className="label">Новый пароль</span>
-          <input type="password" value={next} minLength={8} autoComplete="new-password" onChange={(e) => setNext(e.target.value)} required />
-        </label>
+        <PasswordField label="Текущий пароль" value={old} onChange={setOld} autoComplete="current-password" />
+        <PasswordField label="Новый пароль" hint="Не короче 8 символов" value={next} onChange={setNext}
+                       autoComplete="new-password" min={8} />
       </div>
       {msg && <p className={`hint ${msg.ok ? "ok" : "warn"}`}>{msg.text}</p>}
       <button type="submit" className="btn">

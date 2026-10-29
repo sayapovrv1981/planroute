@@ -3,8 +3,9 @@
 Пароль храним только хешем scrypt (стандартная библиотека) с солью. Сессия — случайный токен в cookie
 HttpOnly + SameSite=Lax; в базе лежит sha256 от него, так что утёкшая база не даёт войти чужими сессиями.
 Подбор пароля: после MAX_FAILS неудачных попыток за FAIL_WINDOW по почте или по адресу — пауза.
+Забыли пароль: одноразовый токен на RESET_HOURS в письме (`mailer.py`), в базе — только sha256 от него.
 Поездки, созданные до появления аккаунтов (без владельца), достаются первому зарегистрированному.
-Дальше по плану — вход через Яндекс ID и VK ID и восстановление пароля по почте.
+Дальше по плану — вход через Яндекс ID и VK ID.
 """
 from __future__ import annotations
 
@@ -16,13 +17,16 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from . import store
+from . import mailer, store
 
 COOKIE = "sh_session"
 SESSION_DAYS = 30
 MIN_PASSWORD = 8
 MAX_FAILS = 5
 FAIL_WINDOW = 15 * 60
+RESET_HOURS = 2
+RESET_MAX = 3  # запросов на сброс по одной почте за RESET_WINDOW
+RESET_WINDOW = 60 * 60
 SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1}
 EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
@@ -154,3 +158,57 @@ def end_session(token: str | None) -> None:
     if token:
         with store._lock, store._db() as con:
             con.execute("delete from sessions where token = ?", (_digest(token),))
+
+
+# ------------------------------------------------------------------ забыли пароль
+
+def request_reset(email: str) -> bool:
+    """Послать письмо со ссылкой на новый пароль. False — такой почты нет или слишком часто просят.
+
+    Наружу разницу не показываем: иначе по ответу можно узнать, кто зарегистрирован.
+    """
+    email = norm_email(email)
+    if not EMAIL_RE.fullmatch(email):
+        raise ValueError("Проверьте адрес почты")
+    with store._lock, store._db() as con:
+        row = con.execute("select id, email, name from users where email = ?", (email,)).fetchone()
+        if not row:
+            return False
+        since = (datetime.now(timezone.utc) - timedelta(seconds=RESET_WINDOW)).isoformat()
+        recent = con.execute("select count(*) from resets where user_id = ? and created > ?", (row[0], since)).fetchone()[0]
+        if recent >= RESET_MAX:
+            return False
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.now(timezone.utc) + timedelta(hours=RESET_HOURS)).isoformat()
+        con.execute("insert into resets (token, user_id, created, expires, used) values (?, ?, ?, ?, null)",
+                    (_digest(token), row[0], _now(), expires))
+        con.execute("delete from resets where expires < ?", (since,))  # старые — убираем
+    mailer.send_password_reset(row[1], row[2], token, RESET_HOURS)
+    return True
+
+
+def reset_user(token: str) -> dict | None:
+    """Чей это токен сброса, если он ещё годен."""
+    if not token:
+        return None
+    with store._lock, store._db() as con:
+        row = con.execute("select u.id, u.email, u.name from resets r join users u on u.id = r.user_id "
+                          "where r.token = ? and r.used is null and r.expires > ?",
+                          (_digest(token), _now())).fetchone()
+    return _public(row) if row else None
+
+
+def reset_password(token: str, new: str) -> dict:
+    """Задать новый пароль по токену из письма; все прежние сессии закрываются."""
+    user = reset_user(token)
+    if not user:
+        raise ValueError("Ссылка устарела — запросите письмо заново")
+    _check_new_password(new)
+    with store._lock, store._db() as con:
+        con.execute("update users set password = ? where id = ?", (hash_password(new), user["id"]))
+        con.execute("update resets set used = ? where token = ?", (_now(), _digest(token)))
+        con.execute("delete from resets where user_id = ? and used is null", (user["id"],))  # прочие письма — недействительны
+        con.execute("delete from sessions where user_id = ?", (user["id"],))
+    with _fails_lock:
+        _fails.pop(f"email:{user['email']}", None)  # пароль сменили — пауза за подбор больше не нужна
+    return user

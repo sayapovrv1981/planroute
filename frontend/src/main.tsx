@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { FormPage } from "./FormPage";
-import { LoginPage, MyTripsPage } from "./AccountPages";
+import { LoginPage, MyTripsPage, ResetPage } from "./AccountPages";
 import { navigate, UserContext } from "./nav";
 import type { User } from "./nav";
 import { TripPage } from "./TripPage";
@@ -28,7 +28,17 @@ function App() {
 
   const path = window.location.pathname;
   let page;
-  if (!user) {
+  if (path === "/reset") {
+    // ссылка из письма: новый пароль задаём и когда в этом браузере уже кто-то вошёл
+    page = (
+      <ResetPage
+        onDone={(u) => {
+          setUser(u);
+          navigate("/trips");
+        }}
+      />
+    );
+  } else if (!user) {
     // без входа — только вход и регистрация; после входа вернём туда, куда шли
     const next = path === "/login" ? new URLSearchParams(window.location.search).get("next") || "/" : loc;
     page = (

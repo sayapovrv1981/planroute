@@ -28,7 +28,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import uvicorn  # noqa: E402
 from playwright.sync_api import expect, sync_playwright  # noqa: E402
 
+from app import mailer  # noqa: E402
 from app.main import app  # noqa: E402
+
+letters: list[str] = []  # письма вместо SMTP — чтобы пройти путь «забыли пароль» до конца
+mailer.send = lambda to, subject, text: bool(letters.append(text)) or True
 
 _sock = socket.socket()
 _sock.bind(("127.0.0.1", 0))
@@ -41,6 +45,7 @@ for _ in range(200):
         break
     time.sleep(0.05)
 BASE = f"http://127.0.0.1:{PORT}"
+os.environ["APP_URL"] = BASE  # ссылка в письме — на свой сервер, а не на живой :8000
 out = Path(sys.argv[1] if len(sys.argv) > 1 else "e2e-shots")
 out.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
@@ -74,15 +79,22 @@ with sync_playwright() as p:
     setup(page)
 
     # --- без входа — страница входа; регистрация открывает форму
+    email = f"e2e-{uuid.uuid4().hex[:8]}@example.ru"
     page.goto(BASE + "/")
     expect(page.get_by_role("heading", name="Вход")).to_be_visible()
+    page.screenshot(path=str(out / "0-login.png"), full_page=True)
     page.get_by_role("tab", name="Регистрация").click()
     page.get_by_label("Как к вам обращаться").fill("Тест")
-    page.get_by_label("Почта").fill(f"e2e-{uuid.uuid4().hex[:8]}@example.ru")
+    page.get_by_label("Почта").fill(email)
     page.get_by_label("Пароль").fill("коротк")
     page.get_by_role("button", name="Создать аккаунт").click()
     expect(page.get_by_role("heading", name="Регистрация")).to_be_visible()  # короткий пароль не пропустит браузер
     page.get_by_label("Пароль").fill("secret-pass-1")
+    # «Показать» открывает пароль, чтобы увидеть опечатку
+    page.get_by_role("button", name="Показать").click()
+    expect(page.get_by_label("Пароль")).to_have_attribute("type", "text")
+    page.get_by_role("button", name="Скрыть").click()
+    page.screenshot(path=str(out / "0-register.png"), full_page=True)
     page.get_by_role("button", name="Создать аккаунт").click()
 
     # --- форма
@@ -367,6 +379,43 @@ with sync_playwright() as p:
     expect(page.get_by_role("heading", name="Вход")).to_be_visible()
     page.goto(trip_url)
     expect(page.get_by_role("heading", name="Вход")).to_be_visible()
+
+    # --- забыли пароль: письмо -> ссылка -> новый пароль -> вход и поездки на месте
+    page.get_by_role("button", name="Забыли пароль?").click()
+    expect(page.get_by_role("heading", name="Забыли пароль")).to_be_visible()
+    page.get_by_label("Почта аккаунта").fill(email)
+    page.screenshot(path=str(out / "0-forgot.png"), full_page=True)
+    letters.clear()
+    page.get_by_role("button", name="Прислать ссылку").click()
+    expect(page.get_by_text(f"Письмо со ссылкой отправлено на {email}")).to_be_visible()
+    assert len(letters) == 1, f"письмо не отправлено: {letters}"
+    link = re.search(r"http\S+/reset\?token=\S+", letters[0]).group(0)
+    page.goto(link)
+    expect(page.get_by_role("heading", name="Новый пароль")).to_be_visible()
+    expect(page.get_by_text(email)).to_be_visible()
+    page.get_by_label("Новый пароль").fill("brand-new-pass")
+    page.get_by_label("Ещё раз").fill("brand-new-другой")
+    page.get_by_role("button", name="Сохранить и войти").click()
+    expect(page.get_by_text("Пароли не совпадают")).to_be_visible()
+    page.get_by_label("Ещё раз").fill("brand-new-pass")
+    page.screenshot(path=str(out / "0-reset.png"), full_page=True)
+    page.get_by_role("button", name="Сохранить и войти").click()
+    expect(page.get_by_role("heading", name="Мои поездки")).to_be_visible()  # вошли сразу, поездки на месте
+    expect(page.get_by_role("list", name="Мои поездки").get_by_role("listitem")).not_to_have_count(0)
+    page.goto(link)  # ссылка одноразовая
+    expect(page.get_by_text("Ссылка устарела")).to_be_visible()
+    # старый пароль больше не подходит, новый — работает
+    page.goto(BASE + "/trips")
+    page.get_by_role("button", name="Выйти").click()
+    expect(page.get_by_role("heading", name="Вход")).to_be_visible()
+    page.get_by_label("Почта").fill(email)
+    page.get_by_label("Пароль").fill("secret-pass-1")
+    page.get_by_role("button", name="Войти").click()
+    expect(page.get_by_text("Неверная почта или пароль")).to_be_visible()
+    expect(page.get_by_label("Пароль")).to_have_value("")  # после ошибки поле пустое
+    page.get_by_label("Пароль").fill("brand-new-pass")
+    page.get_by_role("button", name="Войти").click()
+    expect(page.get_by_role("heading", name="Откуда и куда")).to_be_visible()
     browser.close()
 _server.should_exit = True
 
