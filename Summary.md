@@ -41,7 +41,6 @@ Dockerfile, docker-compose.yml, .dockerignore   НОВОЕ — образ при
 `backend/var/postgres`), сервер — `bash scripts/run.sh` или F5 в VS Code (задача «Перед запуском» поднимает базу).
 Локальные аккаунт и 2 поездки пользователя перенесены из SQLite в PostgreSQL (`manage.py sqlite-to-pg`).
 
-**Push в GitHub с Mac не настроен** (нет учётных данных git, нет `gh`): коммиты ниже локальные.
 
 ## 3. Что сделано в этой сессии
 
@@ -82,7 +81,7 @@ Dockerfile, docker-compose.yml, .dockerignore   НОВОЕ — образ при
 
 ## 5. Следующие шаги
 
-1. Настроить push в GitHub с Mac (токен или SSH-ключ) и отправить локальные коммиты.
+1. (сделано) GitHub с Mac подключён по SSH (ключ ~/.ssh/id_ed25519), коммиты отправлены.
 2. Проверить Docker-сборку там, где есть Docker (`docker compose up -d --build`), и бакет Yandex Object Storage
    (`STORAGE=s3`, сервисный аккаунт с ролью storage.editor).
 3. Остаток этапа C.0: VPS в России, домен, nginx + Let's Encrypt; перенос данных с прежнего сервера —
