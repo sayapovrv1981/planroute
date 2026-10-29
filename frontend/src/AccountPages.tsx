@@ -443,11 +443,10 @@ function ChangePassword({ onSessionRenewed }: { onSessionRenewed: () => void }) 
         }
       }}
     >
-      <div className="row">
-        <PasswordField label="Текущий пароль" value={old} onChange={setOld} autoComplete="current-password" />
-        <PasswordField label="Новый пароль" hint="Не короче 8 символов" value={next} onChange={setNext}
-                       autoComplete="new-password" min={8} />
-      </div>
+      {/* поля сверху вниз: так видно, что сначала текущий пароль, потом новый */}
+      <PasswordField label="Текущий пароль" value={old} onChange={setOld} autoComplete="current-password" />
+      <PasswordField label="Новый пароль" hint="Не короче 8 символов" value={next} onChange={setNext}
+                     autoComplete="new-password" min={8} />
       {msg && <p className={`hint ${msg.ok ? "ok" : "warn"}`}>{msg.text}</p>}
       <button type="submit" className="btn">
         Сменить пароль

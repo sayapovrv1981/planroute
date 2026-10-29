@@ -307,6 +307,8 @@ textarea { height: auto; padding: 12px 14px; resize: vertical; }
 .account-facts dt { font-size: 13px; color: var(--muted); }
 .account-facts dd { margin: 0; font-weight: 700; }
 .account-pw form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; align-items: flex-start; }
+/* поля в столбик: ширину задаём сами, иначе при align-items: flex-start они сжимаются до текста подписи */
+.account-pw .field { align-self: stretch; max-width: 380px; }
 .trips-head { justify-content: space-between; align-items: center; }
 .trips-head h2, .card h2 { margin: 0; font-size: 20px; }
 .as-button { display: inline-flex; align-items: center; text-decoration: none; }
