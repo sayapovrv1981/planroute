@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -43,7 +44,8 @@ def facts(card: dict, p: dict) -> dict:
     return {"title": card["title"], "address": card.get("address", ""), "id": str(card.get("id") or ""),
             "km": round(haversine_km(float(lat), float(lon), p["lat"], p["lon"]), 2),
             "rating": round(float(r["ratingValue"]), 1) if r.get("ratingValue") else None,
-            "reviews": int(r.get("reviewCount") or 0), "hours": yandexmaps.hours(card.get("workingTime"))}
+            "reviews": int(r.get("reviewCount") or 0), "hours": yandexmaps.hours(card.get("workingTime")),
+            "closed": card.get("status") in ("permanent-closed", "temporary-closed")}
 
 
 def candidates(p: dict, city: str) -> list[dict]:
@@ -64,12 +66,15 @@ def candidates(p: dict, city: str) -> list[dict]:
 
 def by_id(p: dict) -> dict | None:
     """Страница организации по ymaps_id из каталога: там рейтинг и часы точно того заведения."""
-    page, _ = yandexmaps.fetch(f"https://yandex.ru/maps/org/{p['ymaps_id']}/")
-    try:
-        card = yandexmaps._card(yandexmaps._state(page), str(p["ymaps_id"]))
-    except ValueError:
-        return None
-    return facts(card, p) if card else None
+    for pause in (3, 10, 30):  # на частые запросы Карты отвечают ошибкой — ждём и пробуем снова
+        time.sleep(pause)
+        try:
+            page, _ = yandexmaps.fetch(f"https://yandex.ru/maps/org/{p['ymaps_id']}/")
+            card = yandexmaps._card(yandexmaps._state(page), str(p["ymaps_id"]))
+        except ValueError:
+            continue
+        return facts(card, p) if card else None
+    return None
 
 
 def main(path: str, write: bool) -> None:
@@ -83,7 +88,7 @@ def main(path: str, write: bool) -> None:
             print(f"\n{p['id']} · {p['name']} · часы в каталоге {p.get('hours')} · ymaps_id {p.get('ymaps_id')}")
             for f in candidates(p, city):
                 print(f"   {f['id']} · {f['title']} · {f['address']} · {f['km']} км · "
-                      f"★ {f['rating']} ({f['reviews']}) · часы {f['hours']}")
+                      f"★ {f['rating']} ({f['reviews']}) · часы {f['hours']}" + (" · ЗАКРЫТО" if f["closed"] else ""))
             continue
         if not p.get("ymaps_id"):
             print(f"— {p['id']}: нет ymaps_id, пропускаем")
@@ -91,6 +96,9 @@ def main(path: str, write: bool) -> None:
         found = by_id(p)
         if not found:
             print(f"— {p['id']}: Карты не отдали карточку {p['ymaps_id']}")
+            continue
+        if found["closed"]:
+            print(f"! {p['id']}: заведение {found['title']} закрыто, замените его в каталоге")
             continue
         print(f"{p['id']}: {found['title']} · ★ {found['rating']} ({found['reviews']}) · "
               f"часы {found['hours']} (было {p.get('hours')})")
