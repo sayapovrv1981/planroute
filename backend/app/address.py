@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -27,7 +28,15 @@ def provider() -> str:
 
 
 def _http_json(req: urllib.request.Request) -> dict:
-    return net.get_json(req, TIMEOUT)
+    """Сбой сети или таймаут — ещё одна попытка: Photon (сервер в Германии) из России иногда не успевает
+    установить TLS-соединение за TIMEOUT, а со второго раза отвечает за секунду. Ответ с ошибкой (4xx, 5xx) не повторяем."""
+    try:
+        return net.get_json(req, TIMEOUT)
+    except urllib.error.HTTPError:
+        raise
+    except OSError as e:  # URLError, socket.timeout, ssl
+        print(f"[address] {provider()}: {type(e).__name__}: {e} — пробуем ещё раз", flush=True)
+        return net.get_json(req, TIMEOUT + 2)
 
 
 def parse_dadata(payload: dict) -> list[dict]:

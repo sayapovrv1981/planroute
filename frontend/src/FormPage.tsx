@@ -413,14 +413,12 @@ export function FormPage() {
 
           <Section n={6} title="Бюджет">
             <div className="row">
-              <div className="money">
-                <label htmlFor="budget" className="sr">
-                  Бюджет на всю поездку на всех, рублей
-                </label>
-                <input id="budget" inputMode="numeric" value={f.budget} onChange={(e) => set("budget", e.target.value)} />
-                <span aria-hidden="true">₽</span>
-                <small className="money-note">на всех за всю поездку</small>
-              </div>
+              <Field label="Сумма" id="budget" narrow>
+                <div className="money">
+                  <input id="budget" inputMode="numeric" value={f.budget} onChange={(e) => set("budget", e.target.value)} />
+                  <span aria-hidden="true">₽</span>
+                </div>
+              </Field>
               <Field label="Можно превысить на" id="tol" narrow>
                 <select id="tol" value={f.budget_tolerance_pct} onChange={(e) => set("budget_tolerance_pct", Number(e.target.value))}>
                   {[0, 5, 10, 15, 20].map((v) => (
@@ -431,7 +429,7 @@ export function FormPage() {
                 </select>
               </Field>
             </div>
-            <p className="hint">На всех, включая дорогу и проживание.</p>
+            <p className="hint">На всех за всю поездку, включая дорогу и проживание.</p>
           </Section>
 
           <Section n={7} title="Где жить" id="stay">

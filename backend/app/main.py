@@ -110,13 +110,8 @@ def present(tid: str, trip: dict) -> dict:
                              "photo": sutochno.thumb(p["photos"][0]) if p.get("photos") else None,
                              "rating": p.get("rating"), "km": dist.get("km"), "dist": dist.get("label")})
             # жильё — в прежнем порядке (по ценам и виду), остальное — по рейтингу и расстоянию
+            # экскурсии Трипстера в «Заменить» не показываем: их выбирают кнопкой «Выбрать» в списке экскурсий
             it["alternatives"] = alts if it["kind"] == "hotel" else planner.by_rating_and_distance(alts)
-            if place and it["kind"] in planner.TRIPSTER_KINDS:
-                # в «Заменить» — сначала экскурсии с гидом сюда же: цена в бюджет, длительность в расписание
-                it["alternatives"] = [{"id": f"tripster-{x['id']}", "name": f"Экскурсия с гидом: {x['title']}",
-                                       "meta": x["meta"], "photo": x["photo"], "wiki": None}
-                                      for x in tripster.for_place(place, ctx.city, kids=ctx.small_kids, n=6)
-                                      ] + it["alternatives"]
             doc = it.get("doc")
             if doc:
                 for f in doc.get("files", []):

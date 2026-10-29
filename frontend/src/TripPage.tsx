@@ -19,6 +19,9 @@ const KIND: Record<Item["kind"], { label: string; cls: string }> = {
   custom: { label: "Свой пункт", cls: "k-rest" },
 };
 
+// места программы (как TRIPSTER_KINDS в planner.py) и экскурсия, которая встала вместо такого места
+const SIGHT_KINDS: Item["kind"][] = ["museum", "sight", "walk", "daytrip", "excursion"];
+
 const ATTACH_LABEL: Record<string, string> = {
   ticket: "Приложить билет",
   booking: "Приложить бронь",
@@ -292,6 +295,14 @@ function ItemRow({
   const hasCost = it.cost.kind !== "none" || !!it.doc;
   const canDelete = !(it.kind === "travel" && it.cost.kind === "ticket");
   const walk = it.transfer?.mode === "пешком";
+  const canReplace = it.alternatives.length > 0 && !locked;
+  // у достопримечательностей «Заменить» — сразу у названия
+  const sight = SIGHT_KINDS.includes(it.kind);
+  const replaceBtn = (
+    <button type="button" className={`btn ${open ? "on" : ""}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+      ⇄ Заменить
+    </button>
+  );
 
   return (
     <li className={`tl-item ${focused ? "focused" : ""}`} id={`item-${it.id}`}>
@@ -350,6 +361,7 @@ function ItemRow({
               {it.note && <p className="note">{it.note}</p>}
               {it.href_ad && <small className="ad-mark">{it.href_ad}</small>}
             </div>
+            {sight && canReplace && <div className="title-action">{replaceBtn}</div>}
           </div>
           {it.photos && it.photos.length > 1 && <Gallery photos={it.photos} />}
 
@@ -424,14 +436,20 @@ function ItemRow({
                 Экскурсии с гидом сюда — {it.excursions.length} {plural(it.excursions.length, "вариант", "варианта", "вариантов")} на Трипстере
               </summary>
               {it.excursions.map((x) => (
-                <a key={x.id} className="excursion" href={x.url} target="_blank" rel="noreferrer sponsored">
-                  {x.photo && <img src={x.photo} alt="" loading="lazy" />}
-                  <span>
-                    <b>{x.title} ↗</b>
-                    <span>{x.meta}</span>
-                    <small className="ad-mark">{x.ad}</small>
-                  </span>
-                </a>
+                <div key={x.id} className="excursion">
+                  <a href={x.url} target="_blank" rel="noreferrer sponsored">
+                    {x.photo && <img src={x.photo} alt="" loading="lazy" />}
+                    <span>
+                      <b>{x.title} ↗</b>
+                      <span>{x.meta}</span>
+                      <small className="ad-mark">{x.ad}</small>
+                    </span>
+                  </a>
+                  {/* экскурсия вместо места: цена — в бюджет, длительность — в расписание */}
+                  <button type="button" className="btn small" onClick={() => actions.replace(it, `tripster-${x.id}`)}>
+                    Выбрать
+                  </button>
+                </div>
               ))}
             </details>
           )}
@@ -469,11 +487,7 @@ function ItemRow({
                   </button>
                 </div>
               )}
-              {it.alternatives.length > 0 && !locked && (
-                <button type="button" className={`btn ${open ? "on" : ""}`} aria-expanded={open} onClick={() => setOpen(!open)}>
-                  ⇄ Заменить
-                </button>
-              )}
+              {canReplace && !sight && replaceBtn}
               {(it.stay_role === "checkin" || it.stay_role === "checkin_late") && (
                 // жильё задаёт весь маршрут — меняем в вводных, и программа строится заново
                 <button

@@ -103,8 +103,9 @@ class TripsterTest(unittest.TestCase):
                                   "return_time": "19:00", "days": 3, "transport": "plane", "adults": 2, "kids_ages": [9]})
         it = next(i for d in trip["days"] for i in d["items"] if i.get("place_id") == "kremlin")
         out = main.present("t", trip)
-        alts = next(i for d in out["days"] for i in d["items"] if i["id"] == it["id"])["alternatives"]
-        self.assertEqual(alts[0]["id"], "tripster-4")  # экскурсии — первыми в «Заменить»
+        shown = next(i for d in out["days"] for i in d["items"] if i["id"] == it["id"])
+        self.assertEqual(shown["excursions"][0]["id"], 4)  # экскурсии — своим списком с кнопкой «Выбрать»
+        self.assertFalse([a for a in shown["alternatives"] if a["id"].startswith("tripster-")])  # в «Заменить» — только места
         # за одного: на всех троих; цена за экскурсию — один раз на группу
         trip = main.put_excursion(trip, it["id"], "tripster-1")
         self.assertEqual((it["kind"], it["duration"], it["cost"]["estimate"]), ("excursion", 90, 2000 * 3))

@@ -91,6 +91,23 @@ class AddressTest(unittest.TestCase):
             self.assertEqual(address.suggest("Тв", "Москва", "train")["suggestions"], [])
         http.assert_not_called()
 
+    def test_network_error_retried_once(self):
+        import urllib.error
+        req = mock.Mock()
+        with mock.patch.object(address.net, "get_json",
+                               side_effect=[urllib.error.URLError("handshake timed out"), PHOTON]) as get:
+            self.assertEqual(address._http_json(req), PHOTON)  # со второй попытки
+        self.assertEqual(get.call_count, 2)
+        with mock.patch.object(address.net, "get_json", side_effect=OSError("нет сети")) as get, \
+                self.assertRaises(OSError):
+            address._http_json(req)
+        self.assertEqual(get.call_count, 2)  # не больше двух попыток
+        err = urllib.error.HTTPError("u", 403, "Forbidden", {}, None)
+        with mock.patch.object(address.net, "get_json", side_effect=err) as get, \
+                self.assertRaises(urllib.error.HTTPError):
+            address._http_json(req)
+        self.assertEqual(get.call_count, 1)  # ответ с ошибкой — не повторяем
+
 
 if __name__ == "__main__":
     unittest.main()
