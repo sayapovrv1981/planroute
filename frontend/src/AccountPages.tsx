@@ -340,7 +340,6 @@ export function MyTripsPage() {
         </div>
         <div className="wrap hero auth-hero">
           <h1>Мои поездки</h1>
-          <p>{user?.email}</p>
         </div>
       </header>
       <main className="wrap auth-wrap">
@@ -376,9 +375,33 @@ export function MyTripsPage() {
             </ul>
           )}
         </section>
-        <ChangePassword onSessionRenewed={() => user && setUser(user)} />
+        <Account onSessionRenewed={() => user && setUser(user)} />
       </main>
     </div>
+  );
+}
+
+/** Карточка пользователя: имя, почта и смена пароля в одном месте. */
+function Account({ onSessionRenewed }: { onSessionRenewed: () => void }) {
+  const { user } = useContext(UserContext);
+  return (
+    <section className="card account">
+      <h2>Пользователь</h2>
+      <dl className="account-facts">
+        <div>
+          <dt>Имя</dt>
+          <dd>{user?.name}</dd>
+        </div>
+        <div>
+          <dt>Почта</dt>
+          <dd>{user?.email}</dd>
+        </div>
+      </dl>
+      <details className="account-pw">
+        <summary>Сменить пароль</summary>
+        <ChangePassword onSessionRenewed={onSessionRenewed} />
+      </details>
+    </section>
   );
 }
 
@@ -388,7 +411,6 @@ function ChangePassword({ onSessionRenewed }: { onSessionRenewed: () => void }) 
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   return (
     <form
-      className="card"
       onSubmit={async (e) => {
         e.preventDefault();
         try {
@@ -402,7 +424,6 @@ function ChangePassword({ onSessionRenewed }: { onSessionRenewed: () => void }) 
         }
       }}
     >
-      <h2>Сменить пароль</h2>
       <div className="row">
         <PasswordField label="Текущий пароль" value={old} onChange={setOld} autoComplete="current-password" />
         <PasswordField label="Новый пароль" hint="Не короче 8 символов" value={next} onChange={setNext}

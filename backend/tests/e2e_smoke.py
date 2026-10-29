@@ -375,6 +375,13 @@ with sync_playwright() as p:
     # --- «Мои поездки»: поездка в списке; выход — снова вход, поездка без входа не открывается
     page.goto(BASE + "/trips")
     expect(page.get_by_role("list", name="Мои поездки").get_by_role("listitem")).not_to_have_count(0)
+    # карточка пользователя: имя и почта на виду, смена пароля раскрывается
+    card = page.locator("section.account")
+    expect(card.get_by_text(email)).to_be_visible()
+    expect(card.get_by_label("Текущий пароль")).to_be_hidden()
+    card.locator("summary").click()
+    expect(card.get_by_label("Текущий пароль")).to_be_visible()
+    page.screenshot(path=str(out / "6-trips.png"), full_page=True)
     page.get_by_role("button", name="Выйти").click()
     expect(page.get_by_role("heading", name="Вход")).to_be_visible()
     page.goto(trip_url)

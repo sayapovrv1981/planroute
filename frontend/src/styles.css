@@ -276,7 +276,8 @@ textarea { height: auto; padding: 12px 14px; resize: vertical; }
 .back { align-self: flex-start; background: none; border: 0; padding: 6px 0; font-weight: 700; color: var(--accent); cursor: pointer; font-size: 15px; }
 .back:hover { color: var(--accent-dark); }
 .top-nav { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
-.top-nav .user-name { color: #fff; font-weight: 700; }
+.top-nav .user-name { color: #c9d2de; font-weight: 600; }
+.top-nav a[aria-current="page"] { color: #fff; }
 .top-link { background: none; border: 0; padding: 0; color: #c9d2de; font-weight: 600; cursor: pointer; }
 .top-link:hover { color: #fff; }
 .auth-hero { padding-bottom: 70px; }
@@ -302,6 +303,11 @@ textarea { height: auto; padding: 12px 14px; resize: vertical; }
 @media (max-width: 640px) {
   .pw input { padding-right: 90px; }
 }
+.account-facts { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 32px; }
+.account-facts dt { font-size: 13px; color: var(--muted); }
+.account-facts dd { margin: 0; font-weight: 700; }
+.account-pw summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+.account-pw form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; align-items: flex-start; }
 .trips-head { justify-content: space-between; align-items: center; }
 .trips-head h2, .card h2 { margin: 0; font-size: 20px; }
 .as-button { display: inline-flex; align-items: center; text-decoration: none; }
