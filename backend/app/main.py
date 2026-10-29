@@ -209,7 +209,9 @@ async def stays(request: Request) -> JSONResponse:
                                           "wishes": q.get("wishes", ""), "tags": [t for t in q.get("tags", "").split(",") if t],
                                           "transport": q.get("transport") or "auto",
                                           "return_transport": q.get("return_transport") or "",
-                                          "out_price": q.get("out_price") or 0, "back_price": q.get("back_price") or 0})
+                                          "out_price": q.get("out_price") or 0, "back_price": q.get("back_price") or 0,
+                                          "start_time": q.get("start_time") or "09:00",
+                                          "arrive_time": q.get("arrive_time") or ""})
     except (ValueError, TypeError) as e:
         return err(422, str(e))
     ctx = planner.Ctx(ti)

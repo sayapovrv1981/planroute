@@ -290,11 +290,12 @@ def price_note(price: int) -> str:
     return f" · билет от {price:,} ₽ за взрослого по Яндекс.Расписаниям".replace(",", "\u202f")
 
 
-def leg_minutes(dep: str, arr: str, default: int) -> int:
-    """Длительность в пути по расписанию; прибытие раньше отправления — значит, на следующие сутки."""
+def leg_minutes(dep: str, arr: str, default: int, shift: int = 0) -> int:
+    """Длительность в пути по расписанию; прибытие раньше отправления — значит, на следующие сутки.
+    Время в расписании местное: shift — на сколько минут часы в месте прибытия отличаются от места отправления."""
     if not arr:
         return default
-    m = parse_hm(arr) - parse_hm(dep)
+    m = parse_hm(arr) - parse_hm(dep) - shift
     return m if m > 0 else m + 24 * 60
 
 
@@ -310,6 +311,15 @@ def leg_note(transport: str, dep: str, arr: str, number: str, minutes: int) -> s
     if number:
         parts.append(f"{NUMBER_LABEL.get(transport, 'рейс')} № {number}")
     return " · ".join(parts)
+
+
+def tz_note(ctx: "Ctx", outbound: bool) -> str:
+    """Часы в городе поездки другие: в расписании время местное — у отправления своё, у прибытия своё."""
+    if not ctx.shift:
+        return ""
+    h = abs(ctx.shift) // 60
+    diff = f"на {h} ч {'меньше' if ctx.shift < 0 else 'больше'}, чем в Москве"
+    return f" · время прибытия местное: {diff}" if outbound else f" · время отправления местное: {diff}"
 
 
 class Ctx:
@@ -354,8 +364,16 @@ class Ctx:
         self.skipped: set[str] = set()
         self.boarding = ti.boarding_min if ti.boarding_min is not None else BOARDING_DEFAULT.get(transport, 30)
         self.back_boarding = ti.boarding_min if ti.boarding_min is not None else BOARDING_DEFAULT.get(back, 30)
-        self.out_minutes = leg_minutes(ti.start_time, ti.arrive_time, self.route["minutes"])
-        self.back_minutes = leg_minutes(ti.return_time, ti.return_arrive_time, self.back_route["minutes"])
+        # разница во времени с Москвой (поле tz каталога, в часах: Калининград −1); программа в городе — по местному
+        self.shift = int(self.data.get("tz", 0)) * 60
+        self.out_minutes = leg_minutes(ti.start_time, ti.arrive_time, self.route["minutes"], self.shift)
+        self.back_minutes = leg_minutes(ti.return_time, ti.return_arrive_time, self.back_route["minutes"], -self.shift)
+        arrive = parse_hm(ti.start_time) + self.out_minutes + self.shift  # местное время прибытия
+        # ночной поезд: уезжаем вечером, приезжаем утром — первый день только дорога, жильё со второго
+        self.night_out = ti.days >= 2 and transport != "car" and arrive >= 24 * 60 + 4 * 60
+        self.arrive_at = arrive - 24 * 60 if self.night_out else arrive
+        self.stay_from = self.start_date + timedelta(days=int(self.night_out))
+        self.nights = max(1, ti.days - 1 - int(self.night_out))
 
         self.extra: dict[str, dict] = {}  # места этой поездки не из каталога (квартира с Суточно.ру)
 
@@ -469,7 +487,7 @@ YANDEX_GEO_ID = {"Санкт-Петербург": 2, "Москва": 213, "Ка�
 def hotels_link(ctx: Ctx) -> str:
     """Поиск отелей на Яндекс Путешествиях на даты поездки и состав группы."""
     ti = ctx.ti
-    checkout = ctx.start_date + timedelta(days=max(1, ti.days - 1))
+    checkout = ctx.stay_from + timedelta(days=ctx.nights)
     q = {"adults": ti.adults, "checkinDate": ctx.start_date.isoformat(), "checkoutDate": checkout.isoformat()}
     if ti.kids_ages:
         q["childrenAges"] = ",".join(str(a) for a in ti.kids_ages)
@@ -480,7 +498,7 @@ def hotels_link(ctx: Ctx) -> str:
 
 
 def stay_dates(ctx: Ctx) -> tuple[date, date]:
-    return ctx.start_date, ctx.start_date + timedelta(days=max(1, ctx.ti.days - 1))
+    return ctx.stay_from, ctx.stay_from + timedelta(days=ctx.nights)
 
 
 def sutochno_link(ctx: Ctx) -> str:
@@ -583,7 +601,8 @@ def links_for(ctx: Ctx, p: dict) -> list[dict]:
 
 def make_item(kind: str, title: str, duration: int, *, place: dict | None = None, note: str = "",
               fixed: int | None = None, cost_kind: str = "none", estimate: int = 0,
-              links: list | None = None, point: dict | None = None, alternatives: list | None = None) -> dict:
+              links: list | None = None, point: dict | None = None, alternatives: list | None = None,
+              shift: int = 0) -> dict:
     coords = point or place
     return {
         "id": new_id(),
@@ -604,6 +623,7 @@ def make_item(kind: str, title: str, duration: int, *, place: dict | None = None
         "meal": None,
         "far": None,
         "start": None, "end": None, "transfer": None, "wait": 0, "warnings": [],
+        "shift": shift,  # дорога в другой часовой пояс: после неё часы переводятся на столько минут
     }
 
 
@@ -708,7 +728,7 @@ def stay_units(ctx: Ctx, p: dict) -> int:
 
 
 def stay_estimate(ctx: Ctx, p: dict) -> int:
-    return p["price_night"] * max(1, ctx.ti.days - 1) * stay_units(ctx, p)
+    return p["price_night"] * ctx.nights * stay_units(ctx, p)
 
 
 def stay_times_note(p: dict) -> str:
@@ -731,7 +751,7 @@ def chosen_stay(ctx: Ctx) -> dict:
 
 def stay_options(ctx: Ctx) -> dict:
     """Варианты жилья для формы: цена за ночь и за всю поездку на эту группу; recommended — что подберём сами."""
-    nights = max(1, ctx.ti.days - 1)
+    nights = ctx.nights
     rows = [{"id": p["id"], "name": p["name"], "kind": stay_kind(p), "price_night": p["price_night"],
              "units": stay_units(ctx, p), "total": stay_estimate(ctx, p), "note": p.get("note", ""),
              "times": "Заезд с {}, выезд до {}".format(*map(fmt_hm, stay_times(p)[:2])), "placeholder": bool(p.get("placeholder")), "tier": p.get("tier", 1),
@@ -806,9 +826,11 @@ def day_capacity(ctx: Ctx, kind: str) -> float:
     cap = PACE_CAPACITY[ctx.ti.pace]
     if ctx.kids:
         cap = max(1.0, cap - 0.5)
-    arrive = parse_hm(ctx.ti.start_time) + ctx.out_minutes + 60
+    arrive = ctx.arrive_at + 60
     leave = parse_hm(ctx.ti.return_time) - 90
-    if kind == "first":
+    if kind == "night":
+        cap = 0.0
+    elif kind == "first":
         cap *= max(0.0, min(1.0, (19 * 60 - arrive) / (10 * 60)))
     elif kind == "last":
         cap *= max(0.0, min(1.0, (leave - 10 * 60) / (9 * 60)))
@@ -1003,9 +1025,12 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
         return add(stay(it, "back"))
 
     # ---- утро / приезд
-    if d.kind in ("first", "single"):
-        if ctx.transport == "car":
-            add(make_item("travel", f"Выезд из {ti.origin}", ctx.out_minutes, fixed=dep,
+    if d.kind in ("first", "single", "night"):
+        if d.kind != "night" and ctx.night_out:  # приехали ночным поездом: день начинается с вокзала
+            add(make_item("travel", f"Прибытие: {(arrive_pt or {}).get('name', ctx.city)}", 15, fixed=ctx.arrive_at,
+                          point=arrive_pt, note="Ночь в дороге позади"))
+        elif ctx.transport == "car":
+            add(make_item("travel", f"Выезд из {ti.origin}", ctx.out_minutes, fixed=dep, shift=ctx.shift,
                           note="Ориентировочно, с остановками" if not ti.arrive_time else f"Выезд {ti.start_time}, прибытие {ti.arrive_time}",
                           cost_kind="receipt", estimate=int(route["price"] / 2)))
         else:
@@ -1026,11 +1051,13 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
             link = buy_link(ctx, d.date, True)
             label = TRANSPORT_LABEL[ctx.transport] if ti.out_number else route["label"]
             title = f"{label} {ti.origin} → {ctx.city}" + (f", № {ti.out_number}" if ti.out_number else "")
-            add(make_item("travel", title, ctx.out_minutes, fixed=dep,
+            add(make_item("travel", title, ctx.out_minutes, fixed=dep, shift=ctx.shift,
                           point=arrive_pt, cost_kind="ticket",
                           estimate=int(ctx.out_price * ctx.people_price), links=link + rasp_link(ctx, d.date, True),
                           note=leg_note(ctx.transport, ti.start_time, ti.arrive_time, ti.out_number, ctx.out_minutes)
-                          + price_note(ti.out_price)))
+                          + tz_note(ctx, True) + price_note(ti.out_price)))
+        if d.kind == "night":
+            return items  # программа в городе — со следующего утра
         if d.kind == "single":
             point = arrive_pt or hotel
         else:
@@ -1043,6 +1070,12 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
                                estimate=stay_estimate(ctx, hotel), links=links_for(ctx, hotel)),
                      "checkin", checkin_early=late_checkin))
             point = hotel
+        if ctx.night_out and simulate_end(ctx, items) <= 10 * 60 + 30:  # с ночного поезда — сначала завтрак
+            f = nearest_food(ctx, point, d.date, simulate_end(ctx, items) + 15, used_food, "breakfast")
+            if f:
+                add(food_item(ctx, f[0], "breakfast"))
+                used_food.add(f[0]["id"])
+                point = f[0]
     else:
         wake = parse_hm("09:30") if ti.pace == "relaxed" else parse_hm("08:30")
         add(stay(make_item("rest", "Подъём", 30, fixed=wake, point=hotel), "wake"))
@@ -1115,7 +1148,8 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
             it = add(food_item(ctx, p, "lunch"))
             used_food.add(p["id"])
         elif kind == "checkin":  # утром оставили вещи — заселяемся днём, а не поздно вечером
-            add(stay(make_item("hotel", "Заселение", CHECKIN_MIN, place=hotel), "checkin_late"))
+            # номер может быть ещё не готов: checkin_step заложил ожидание — заселение не раньше времени заезда
+            add(stay(make_item("hotel", "Заселение", CHECKIN_MIN, place=hotel, fixed=stay_times(hotel)[0]), "checkin_late"))
             late_checkin = False
         else:
             add(attraction_item(ctx, p))
@@ -1132,7 +1166,7 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
                 add(dinner)
                 used_food.add(f[0]["id"])
         if ctx.back_transport == "car":
-            add(make_item("travel", f"Обратная дорога в {ti.origin}", ctx.back_minutes, fixed=ret,
+            add(make_item("travel", f"Обратная дорога в {ti.origin}", ctx.back_minutes, fixed=ret, shift=-ctx.shift,
                           note="Ориентировочно, с остановками" if not ti.return_arrive_time
                           else f"Выезд {ti.return_time}, прибытие {ti.return_arrive_time}",
                           cost_kind="receipt", estimate=int(ctx.back_route["price"] / 2)))
@@ -1143,11 +1177,11 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
             link = buy_link(ctx, d.date, False)
             label = TRANSPORT_LABEL[ctx.back_transport] if ti.back_number else ctx.back_route["label"]
             title = f"{label} {ctx.city} → {ti.origin}" + (f", № {ti.back_number}" if ti.back_number else "")
-            add(make_item("travel", title, ctx.back_minutes, fixed=ret,
+            add(make_item("travel", title, ctx.back_minutes, fixed=ret, shift=-ctx.shift,
                           point=depart_pt, cost_kind="ticket", estimate=int(ctx.back_price * ctx.people_price),
                           links=link + rasp_link(ctx, d.date, False),
                           note=leg_note(ctx.back_transport, ti.return_time, ti.return_arrive_time, ti.back_number, ctx.back_minutes)
-                          + price_note(ti.back_price)))
+                          + tz_note(ctx, False) + price_note(ti.back_price)))
         return items
 
     rest_needed = ti.pace in ("calm", "relaxed", "balanced") or ctx.kids
@@ -1214,7 +1248,7 @@ def simulate_end(ctx: Ctx, items: list[dict]) -> int:
         t += tr["minutes"] if tr else 0
         if it.get("fixed_start") is not None:
             t = max(t, it["fixed_start"])
-        t += it["duration"]
+        t += it["duration"] + it.get("shift", 0)
         if it.get("lat") is not None:
             prev = it
     return t
@@ -1272,9 +1306,11 @@ def plan_trip(raw: dict, custom_places: dict | None = None, events: list[dict] |
 
     days: list[DayPlan] = []
     for i in range(ti.days):
-        if ti.days == 1:
+        if ctx.night_out and i == 0:
+            kind = "night"  # вечером в поезд, ночь в дороге
+        elif ti.days == 1 or (ctx.night_out and i == 1 and ti.days == 2):
             kind = "single"
-        elif i == 0:
+        elif i == int(ctx.night_out):
             kind = "first"
         elif i == ti.days - 1:
             kind = "last"
@@ -1294,7 +1330,7 @@ def plan_trip(raw: dict, custom_places: dict | None = None, events: list[dict] |
     th = None if any(d.theatre for d in days) else choose_theatre(ctx)  # свой билет в театр — вместо подбора
     if th:
         # в день приезда — только если до спектакля успеваем заселиться и поужинать
-        arrive = parse_hm(ti.start_time) + ctx.out_minutes
+        arrive = ctx.arrive_at
         evening_days = [d for d in days if d.kind == "middle"
                         or (d.kind == "first" and arrive + 180 <= parse_hm(th["start"]))]
         target = next((d for d in evening_days if d.kind == "middle"), evening_days[0] if evening_days else None)
@@ -1393,7 +1429,7 @@ def recompute(trip: dict) -> dict:
                     it["wait"] = fixed - t if prev is not None else 0
                     t = fixed
             it["start"] = t
-            it["end"] = t + it["duration"]
+            it["end"] = t + it["duration"] + it.get("shift", 0)
             if it.get("place_id"):
                 p = ctx.place(it["place_id"])
                 shift, start = divmod(it["start"], 24 * 60)  # после полуночи — часы следующего дня
@@ -1671,7 +1707,7 @@ def in_origin(trip: dict, day_index: int, after_id: str | None) -> bool:
     legs = [i for i, it in enumerate(items) if it["kind"] == "travel" and it["cost"]["kind"] in ("ticket", "receipt")]
     if not legs:
         return False
-    if day_index == 0 and pos <= legs[0]:
+    if day_index == 0 and (pos <= legs[0] or items[legs[0]]["end"] >= 24 * 60):  # до поезда или в ночном поезде
         return True
     last = len(trip["days"]) - 1
     return day_index == last and (day_index > 0 or len(legs) > 1) and pos > legs[-1]
@@ -1781,7 +1817,7 @@ def cost_basis(ctx: Ctx, it: dict, p: dict | None) -> str:
     if not c.get("estimate"):
         return ""
     if c["kind"] == "booking" and p and p.get("price_night"):
-        nights, units = max(1, ti.days - 1), stay_units(ctx, p)
+        nights, units = ctx.nights, stay_units(ctx, p)
         unit = ("квартиру", "квартиры", "квартир") if stay_kind(p) == "apartment" else ("номер", "номера", "номеров")
         out = f"{rub(p['price_night'])} за {unit[0]} в ночь × {nights} {plural(nights, 'ночь', 'ночи', 'ночей')}"
         return out + (f" × {units} {plural(units, *unit)}" if units > 1 else "")

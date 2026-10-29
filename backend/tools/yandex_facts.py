@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import sys
@@ -71,7 +72,7 @@ def by_id(p: dict) -> dict | None:
         try:
             page, _ = yandexmaps.fetch(f"https://yandex.ru/maps/org/{p['ymaps_id']}/")
             card = yandexmaps._card(yandexmaps._state(page), str(p["ymaps_id"]))
-        except ValueError:
+        except (ValueError, http.client.HTTPException):  # ошибка Карт или оборванный ответ
             continue
         return facts(card, p) if card else None
     return None

@@ -526,5 +526,52 @@ class KazanTest(unittest.TestCase):
         self.assertFalse(any({"daytrip", "theatre"} <= k for k in kinds))
 
 
+class NightTrainTest(unittest.TestCase):
+    NIGHT = dict(BASE, city="Казань", start_date="2026-11-20", transport="train", start_time="22:10",
+                 arrive_time="09:05", return_time="21:00", wishes="")
+
+    def test_first_day_is_only_the_road(self):
+        trip = planner.plan_trip(dict(self.NIGHT))
+        first, second = trip["days"][0]["items"], trip["days"][1]["items"]
+        self.assertEqual([i["kind"] for i in first], ["travel"] * 3)
+        self.assertIn("на следующий день", first[-1]["note"])
+        # второй день — с вокзала, а не с подъёма в отеле; завтрак в кафе
+        self.assertTrue(second[0]["title"].startswith("Прибытие"))
+        self.assertEqual(planner.fmt_hm(second[0]["start"]), "09:05")
+        self.assertNotIn("wake", [i.get("stay_role") for i in second])
+        self.assertIn("breakfast", [i.get("meal") for i in second])
+        # жильё — на одну ночь: ночь в поезде не оплачиваем
+        ctx = planner.trip_ctx(trip)
+        self.assertEqual(ctx.nights, 1)
+        hotel = next(i for i in second if i.get("stay_role") == "checkin")
+        self.assertEqual(hotel["cost"]["estimate"], planner.stay_estimate(ctx, ctx.place(hotel["place_id"])))
+        self.assertEqual(planner.suggestions(trip, 0), [])  # в поезд места не добавляем
+
+    def test_two_days_without_hotel(self):
+        trip = planner.plan_trip(dict(self.NIGHT, days=2))
+        second = trip["days"][1]["items"]
+        self.assertFalse(any(i["kind"] == "hotel" for i in second))
+        self.assertTrue(second[-1]["title"].startswith("Поезд Казань → Москва"))
+
+    def test_day_train_is_not_night(self):
+        ctx = planner.trip_ctx(planner.plan_trip(dict(self.NIGHT, start_time="07:00", arrive_time="18:00")))
+        self.assertFalse(ctx.night_out)
+        self.assertEqual(ctx.nights, 2)
+
+
+class TimeZoneTest(unittest.TestCase):
+    def test_kaliningrad_local_time(self):
+        # Калининград на час позади Москвы: вылет 10:00 по Москве, посадка 11:30 по местному — в пути 2 ч 30 мин
+        trip = planner.plan_trip(dict(BASE, city="Калининград", transport="plane", start_time="10:00",
+                                      arrive_time="11:30", return_time="18:00", return_arrive_time="21:30", wishes=""))
+        out = next(i for i in trip["days"][0]["items"] if i["kind"] == "travel" and i["cost"]["kind"] == "ticket")
+        self.assertEqual(out["duration"], 150)
+        self.assertEqual(planner.fmt_hm(out["end"]), "11:30")
+        self.assertIn("время прибытия местное", out["note"])
+        back = next(i for i in trip["days"][-1]["items"] if i["kind"] == "travel" and i["cost"]["kind"] == "ticket")
+        self.assertEqual(back["duration"], 150)  # 18:00 местного = 19:00 по Москве, прилёт 21:30
+        self.assertEqual(planner.fmt_hm(back["end"]), "21:30")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -626,6 +626,7 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
         adults: String(f.adults), kids: kidsKey, budget: String(budget), stay: f.stay,
         wishes: f.wishes, tags: f.tags.join(","), transport: f.transport, return_transport: f.return_transport,
         out_price: String(f.out_price || 0), back_price: String(f.back_price || 0),
+        start_time: f.start_time, arrive_time: f.arrive_time,  // ночной поезд — на ночь в жилье меньше
       });
       fetch(`/api/stays?${q}`)
         .then((r) => (r.ok ? (r.json() as Promise<StayList>) : Promise.reject()))
@@ -637,7 +638,7 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
       clearTimeout(t);
     };
   }, [f.city, f.origin, f.start_date, f.end_date, f.adults, kidsKey, budget, f.stay, days, f.wishes, f.tags.join(","),
-      f.transport, f.return_transport, f.out_price, f.back_price]);
+      f.transport, f.return_transport, f.out_price, f.back_price, f.start_time, f.arrive_time]);
 
   // своя бронь из сохранённых вводных или черновика — показываем объявление заново
   useEffect(() => {
