@@ -166,6 +166,32 @@ class PlannerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             planner.plan_trip(dict(BASE, end_date="2026-10-20"))
 
+    def test_food_note_has_rating_and_hours(self):
+        ctx = planner.trip_ctx(self.trip)
+        for it in items(self.trip):
+            if it["kind"] != "food" or not it.get("place_id"):
+                continue
+            p = ctx.place(it["place_id"])
+            self.assertIn(f"Средний чек ≈ {planner.rub(p['avg_check'])}", it["note"])
+            if p.get("placeholder"):  # у заглушки «подбор из Яндекс Карт» своих данных нет
+                continue
+            self.assertIn("Работает ", it["note"], it["title"])
+            if p.get("rating"):
+                self.assertIn("на Яндекс Картах", it["note"])
+
+    def test_hours_text(self):
+        self.assertEqual(planner.hours_text({"hours": {"open": "09:00", "close": "21:00", "closed": []}}),
+                         "Работает 09:00–21:00")
+        self.assertEqual(planner.hours_text({"hours": {"open": "09:00", "close": "23:00", "closed": [0, 1],
+                                                       "late": {"4": "01:00", "5": "01:00", "6": "22:00"}}}),
+                         "Работает 09:00–23:00, пт и сб до 01:00, вс до 22:00, выходные пн и вт")
+        self.assertEqual(planner.hours_text({"hours": {"open": "00:00", "close": "23:59", "closed": []}}),
+                         "Работает круглосуточно")
+        self.assertEqual(planner.hours_text({}), "")
+        self.assertEqual(planner.rating_text({"rating": 4.5, "reviews": 211}), "★ 4,5 на Яндекс Картах (211)")
+        self.assertEqual(planner.rating_text({"rating": 5.0}), "★ 5,0 на Яндекс Картах")
+        self.assertEqual(planner.rating_text({}), "")
+
     def test_food_including_breakfast_is_replaceable(self):
         bf = next(i for i in items(self.trip) if i.get("meal") == "breakfast")
         self.assertTrue(bf["alternatives"])
@@ -344,12 +370,15 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(len(museum["doc"]["files"]), 1)
 
     def test_budget_tolerance(self):
-        t = planner.plan_trip(dict(BASE, budget=58000, budget_tolerance_pct=10))
-        b = t["budget"]
-        self.assertGreater(b["total"], b["limit"])
-        self.assertEqual(b["status"], "tolerance")
-        t = planner.plan_trip(dict(BASE, budget=40000, budget_tolerance_pct=10))
-        self.assertEqual(t["budget"]["status"], "over")
+        # лимит считаем от стоимости готовой поездки: сама сумма зависит от данных каталога
+        t = planner.plan_trip(dict(BASE, budget_tolerance_pct=10))
+        total = t["budget"]["total"]
+        for limit, status in ((total, "ok"), (int(total / 1.05), "tolerance"), (int(total / 1.5), "over")):
+            t["input"]["budget"] = limit
+            b = planner.budget(t)
+            self.assertEqual(b["status"], status, (limit, b["total"]))
+            self.assertEqual(b["hard_limit"], int(limit * 1.1))
+        self.assertGreater(b["total"], b["hard_limit"])
 
     def test_exact_schedule(self):
         t = planner.plan_trip(dict(BASE, transport="train", start_time="07:00", arrive_time="10:55", out_number="752А",

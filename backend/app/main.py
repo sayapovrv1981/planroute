@@ -113,6 +113,8 @@ def present(tid: str, trip: dict) -> dict:
                                     + (f", {p['price_child']} ₽ за ребёнка" if p.get("price_child") else ""))
                 if p.get("note") and p["category"] != "hotel":
                     meta.append(p["note"])
+                if p["category"] == "food":
+                    meta.append(planner.hours_text(p))  # рейтинг Picks показывает отдельным полем
                 dist = planner.distance_from(ctx, prev, p) or {}
                 alts.append({"id": pid, "name": p["name"], "meta": " · ".join(m for m in meta if m), "wiki": p.get("wiki"),
                              "wiki_area": bool(p.get("wiki_area")),

@@ -25,10 +25,12 @@ class YandexMapsTest(unittest.TestCase):
     def test_parse(self):
         p = yandexmaps.parse(page(CARD))
         self.assertEqual((p["id"], p["name"], p["category"], p["source"]), ("ymaps-1191221375", "Татарская усадьба", "food", "yandex"))
-        self.assertEqual((p["lat"], p["lon"], p["avg_check"], p["rating"]), (55.780888, 49.117177, 1300, 4.8))
+        self.assertEqual((p["lat"], p["lon"], p["avg_check"], p["rating"], p["reviews"]),
+                         (55.780888, 49.117177, 1300, 4.8, 4493))
         # пн выходной, пт и сб до полуночи
         self.assertEqual(p["hours"], {"open": "11:00", "close": "23:00", "closed": [0], "late": {"4": "23:59", "5": "23:59"}})
-        self.assertEqual(p["note"], "Ресторан, кейтеринг · Казань, ул. Шигабутдина Марджани, 8 · ★ 4,8 на Яндекс Картах (4493)")
+        # рейтинг и часы в описание пункта добавляет planner.food_item — в note их нет
+        self.assertEqual(p["note"], "Ресторан, кейтеринг · Казань, ул. Шигабутдина Марджани, 8")
         self.assertEqual(p["url"], "https://yandex.ru/maps/org/tatarskaya_usadba/1191221375/")
         self.assertEqual(p["photos"], ["https://avatars/x.jpg"])
 

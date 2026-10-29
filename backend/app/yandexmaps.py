@@ -131,9 +131,8 @@ def parse(page: str, oid: str | None = None) -> dict:
     bill = avg_bill(card)
     cats = [c.get("name", "") for c in card.get("categories") or []]
     kind = ", ".join(cats[:2])
+    # рейтинг и часы в описание пункта добавляет planner.food_item из полей ниже — здесь их нет
     note = [kind[:1].upper() + kind[1:], card.get("address", "")]
-    if rating.get("ratingValue"):
-        note.append(f"★ {rating['ratingValue']:.1f}".replace(".", ",") + f" на Яндекс Картах ({rating.get('reviewCount', 0)})")
     if not bill:
         note.append("средний чек не указан — оценили сами")
     og = re.search(r'<meta property="og:image" content="([^"]+)"', page)
@@ -144,6 +143,7 @@ def parse(page: str, oid: str | None = None) -> dict:
         "hours": hours(card.get("workingTime")), "meal": ["breakfast", "lunch", "dinner"],
         "note": " · ".join(n for n in note if n), "address": card.get("address", ""),
         "rating": round(float(rating["ratingValue"]), 1) if rating.get("ratingValue") else None,
+        "reviews": int(rating.get("reviewCount") or 0),
         "url": f"https://yandex.ru/maps/org/{card.get('seoname') or 'org'}/{oid}/",
         "photos": [html.unescape(og.group(1))] if og else [],
     }

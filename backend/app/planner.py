@@ -409,7 +409,42 @@ def opening(place: dict, day: date) -> tuple[int, int] | None:
     if wd in h.get("closed", []):
         return None
     close = h.get("late", {}).get(str(wd), h["close"])
-    return (parse_hm(h["open"]), parse_hm(close))
+    opens, shuts = parse_hm(h["open"]), parse_hm(close)
+    if shuts <= opens:  # закрывается после полуночи («09:00–01:00») — время дня считаем до 23:59
+        shuts = 24 * 60 - 1
+    return (opens, shuts)
+
+
+def days_text(days: list[int]) -> str:
+    """[4, 5] -> «пт и сб»"""
+    names = [WEEKDAYS[d] for d in sorted(days)]
+    return " и ".join([", ".join(names[:-1]), names[-1]] if len(names) > 1 else names)
+
+
+def hours_text(place: dict) -> str:
+    """Часы работы места из каталога словами: «Работает 09:00–21:00, пт и сб до 01:00, выходной пн»."""
+    h = place.get("hours")
+    if not h or place.get("placeholder"):  # у заглушки часы — ориентир для подбора, не настоящие
+        return ""
+    if h["open"] == "00:00" and h["close"] in ("00:00", "23:59"):
+        out = "Работает круглосуточно"
+    else:
+        out = f"Работает {h['open']}–{h['close']}"
+    late = h.get("late") or {}
+    for close in sorted(set(late.values())):
+        out += f", {days_text([int(d) for d, c in late.items() if c == close])} до {close}"
+    if h.get("closed"):
+        word = "выходные" if len(h["closed"]) > 1 else "выходной"
+        out += f", {word} {days_text(h['closed'])}"
+    return out
+
+
+def rating_text(place: dict) -> str:
+    """«★ 4,5 на Яндекс Картах (211)» — рейтинг с Яндекс Карт, если он есть в данных места."""
+    if not place.get("rating"):
+        return ""
+    out = f"★ {place['rating']:.1f}".replace(".", ",") + " на Яндекс Картах"
+    return out + (f" ({place['reviews']})" if place.get("reviews") else "")
 
 
 def place_cost(ctx: Ctx, p: dict) -> int:
@@ -597,10 +632,12 @@ def food_item(ctx: Ctx, p: dict, meal: str, light: bool = False) -> dict:
         dur = 60 if meal == "lunch" or light else (90 if ctx.ti.pace in ("max",) else 120)
         if ctx.ti.pace == "relaxed" and meal == "lunch":
             dur = 90
-    note = p.get("note", "")
-    if p.get("checked") and "уточни" not in note:  # «часы уточните» уже в описании — второй раз не пишем
-        note += " · часы и цены на октябрь 2026, уточните перед визитом"
-    it = make_item("food", f"{title} · {p['name']}", dur, place=p, note=f"Средний чек ≈ {rub(p['avg_check'])} на человека · {note}".strip(" ·"),
+    # хвост описания у всех мест еды одинаковый: чек, своё описание, рейтинг Яндекса, часы работы
+    parts = [f"Средний чек ≈ {rub(p['avg_check'])} на человека", p.get("note", ""),
+             rating_text(p), hours_text(p)]
+    if p.get("checked") and "уточни" not in (p.get("note") or ""):
+        parts.append("часы и цены на октябрь 2026, уточните перед визитом")
+    it = make_item("food", f"{title} · {p['name']}", dur, place=p, note=" · ".join(n for n in parts if n),
                    cost_kind="receipt", estimate=food_cost(ctx, p, light), links=links_for(ctx, p))
     it["meal"] = "dinner_light" if light and meal == "dinner" else meal
     return it
