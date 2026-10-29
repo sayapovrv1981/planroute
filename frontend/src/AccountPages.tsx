@@ -297,9 +297,8 @@ export function ResetPage({ onDone }: { onDone: (u: User) => void }) {
   );
 }
 
-/** «Мои поездки»: список, открыть, удалить; смена пароля. */
+/** «Мои поездки»: список, открыть, удалить. Аккаунт — отдельной страницей (AccountPage). */
 export function MyTripsPage() {
-  const { user, setUser } = useContext(UserContext);
   const [trips, setTrips] = useState<TripRow[] | null>(null);
   const [error, setError] = useState("");
 
@@ -375,33 +374,53 @@ export function MyTripsPage() {
             </ul>
           )}
         </section>
-        <Account onSessionRenewed={() => user && setUser(user)} />
       </main>
     </div>
   );
 }
 
-/** Карточка пользователя: имя, почта и смена пароля в одном месте. */
-function Account({ onSessionRenewed }: { onSessionRenewed: () => void }) {
-  const { user } = useContext(UserContext);
+/** Страница аккаунта (/account, пункт меню с именем): имя, почта и смена пароля. */
+export function AccountPage() {
+  const { user, setUser } = useContext(UserContext);
+  const open = (path: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    navigate(path);
+  };
   return (
-    <section className="card account">
-      <h2>Пользователь</h2>
-      <dl className="account-facts">
-        <div>
-          <dt>Имя</dt>
-          <dd>{user?.name}</dd>
+    <div className="page">
+      <header className="top">
+        <div className="wrap top-bar">
+          <Logo />
+          <nav className="top-nav" aria-label="Основное меню">
+            <a href="/?new" onClick={open("/?new")}>
+              Новая поездка
+            </a>
+            <UserMenu />
+          </nav>
         </div>
-        <div>
-          <dt>Почта</dt>
-          <dd>{user?.email}</dd>
+        <div className="wrap hero auth-hero">
+          <h1>Пользователь</h1>
         </div>
-      </dl>
-      <details className="account-pw">
-        <summary>Сменить пароль</summary>
-        <ChangePassword onSessionRenewed={onSessionRenewed} />
-      </details>
-    </section>
+      </header>
+      <main className="wrap auth-wrap">
+        <section className="card account">
+          <dl className="account-facts">
+            <div>
+              <dt>Имя</dt>
+              <dd>{user?.name}</dd>
+            </div>
+            <div>
+              <dt>Почта</dt>
+              <dd>{user?.email}</dd>
+            </div>
+          </dl>
+        </section>
+        <section className="card account-pw">
+          <h2>Сменить пароль</h2>
+          <ChangePassword onSessionRenewed={() => user && setUser(user)} />
+        </section>
+      </main>
+    </div>
   );
 }
 

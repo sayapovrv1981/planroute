@@ -36,17 +36,17 @@ export const UserContext = createContext<{ user: User | null; setUser: (u: User 
   setUser: () => undefined,
 });
 
-/** Пункты шапки для вошедшего: «Мои поездки», имя, «Выйти». Ставится внутрь <nav className="top-nav">.
- *  Подсвечена текущая страница, а не имя: иначе имя выглядит выбранным пунктом меню. */
+/** Пункты шапки для вошедшего: «Мои поездки», имя (страница аккаунта), «Выйти».
+ *  Ставится внутрь <nav className="top-nav">; подсвечена текущая страница. */
 export function UserMenu() {
   const { user, setUser } = useContext(UserContext);
   if (!user) return null;
-  const here = window.location.pathname === "/trips";
+  const path = window.location.pathname;
   return (
     <>
       <a
         href="/trips"
-        aria-current={here ? "page" : undefined}
+        aria-current={path === "/trips" ? "page" : undefined}
         onClick={(e) => {
           e.preventDefault();
           navigate("/trips");
@@ -54,9 +54,18 @@ export function UserMenu() {
       >
         Мои поездки
       </a>
-      <span className="user-name" title={user.email}>
+      <a
+        href="/account"
+        className="user-name"
+        title={user.email}
+        aria-current={path === "/account" ? "page" : undefined}
+        onClick={(e) => {
+          e.preventDefault();
+          navigate("/account");
+        }}
+      >
         {user.name}
-      </span>
+      </a>
       <button
         type="button"
         className="top-link"

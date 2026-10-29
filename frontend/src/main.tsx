@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { FormPage } from "./FormPage";
-import { LoginPage, MyTripsPage, ResetPage } from "./AccountPages";
+import { AccountPage, LoginPage, MyTripsPage, ResetPage } from "./AccountPages";
 import { navigate, UserContext } from "./nav";
 import type { User } from "./nav";
 import { TripPage } from "./TripPage";
@@ -53,6 +53,8 @@ function App() {
     page = <FormPage key={loc} />;
   } else if (path === "/trips") {
     page = <MyTripsPage />;
+  } else if (path === "/account") {
+    page = <AccountPage />;
   } else {
     const m = loc.match(/^\/trip\/([a-z0-9]+)/i);
     page = m ? <TripPage key={m[1]} id={m[1]} /> : <FormPage key={loc} />;
