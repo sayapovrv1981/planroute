@@ -117,6 +117,8 @@ class TripsterTest(unittest.TestCase):
         link = next(i for d in link for i in d["items"] if i["id"] == it["id"])["links"][0]
         self.assertEqual(link["ad"], "Реклама · ООО «Рога», ИНН 1 · erid: 2Vtzq")
         self.assertIn("exp_partner=planroute", link["url"])
+        day = next(d["date"] for d in trip["days"] if it in d["items"])  # бронь — сразу на день из программы
+        self.assertTrue(link["url"].startswith(f"https://experience.tripster.ru/experience/booking/2/?date={day}&"))
         with self.assertRaises(ValueError):
             main.put_excursion(trip, it["id"], "tripster-999")  # сняли с продажи
         hotel = next(i for d in trip["days"] for i in d["items"] if i.get("stay_role") == "checkin")

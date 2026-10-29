@@ -200,6 +200,17 @@ def link(x: dict, ad: dict) -> str:
     return x["url"] + sep + urllib.parse.urlencode(q)
 
 
+def booking_link(url: str, day: str) -> str:
+    """Ссылка «Забронировать» сразу на страницу брони с датой из программы:
+    …/experience/43657/?utm… -> …/experience/booking/43657/?date=2026-11-24&utm…"""
+    url = re.sub(r"/experience/(\d+)/", r"/experience/booking/\1/", url, count=1)
+    if "/experience/booking/" not in url:
+        return url
+    base, _, query = url.partition("?")
+    q = [(k, v) for k, v in urllib.parse.parse_qsl(query) if k != "date"]
+    return base + "?" + urllib.parse.urlencode([("date", day), *q])
+
+
 def for_place(place: dict, city: str, kids: bool = False, n: int = PER_PLACE) -> list[dict]:
     """До n экскурсий к месту программы: больше совпавших слов — выше, дальше рейтинг с учётом числа отзывов."""
     data = city_data(city)

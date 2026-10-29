@@ -68,6 +68,8 @@ def present(tid: str, trip: dict) -> dict:
             if tripster_city and it["kind"] in planner.TRIPSTER_KINDS:
                 links.append({"label": "Все экскурсии с гидом — Трипстер" if it["excursions"]
                               else "Экскурсии с гидом — Трипстер", "url": tripster_city})
+            if place and place.get("source") == "tripster":  # бронь экскурсии — сразу на дату из программы
+                links = [dict(l, url=tripster.booking_link(l["url"], d["date"])) if l.get("direct") else l for l in links]
             it["links"] = [dict(l, url=u, ad=l.get("ad") or schedule.ad_label(u))
                            for l in links for u in [l["url"] if l.get("direct") else schedule.partner_any(l["url"])]]
             doc = it.get("doc") or {}
