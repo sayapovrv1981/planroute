@@ -86,6 +86,21 @@ ROUTES = {
                               "station": "Аэропорт Шереметьево", "from_pt": (55.9726, 37.4146),
                               "link": ("Найти билеты", "https://travel.yandex.ru/avia/")},
     },
+    "Выборг": {
+        # прямых поездов из Москвы нет: «Сапсан» до Петербурга, метро до Финляндского вокзала, «Ласточка»
+        ("москва", "train"): {"minutes": 360, "price": 5600, "label": "Поезда через Петербург: «Сапсан» и «Ласточка»",
+                              "arrive": "train", "station": "Ленинградский вокзал", "from_pt": (55.7765, 37.6553),
+                              "link": ("Купить билет", "https://www.rzd.ru")},
+        ("москва", "car"): {"minutes": 660, "price": 8000, "label": "На автомобиле по М-11 и А-181", "arrive": None,
+                            "station": None, "link": None},
+        ("санкт-петербург", "train"): {"minutes": 80, "price": 700, "label": "Поезд «Ласточка»", "arrive": "train",
+                                       "station": "Финляндский вокзал", "from_pt": (59.9557, 30.3560),
+                                       "link": ("Купить билет", "https://www.rzd.ru")},
+        ("санкт-петербург", "bus"): {"minutes": 140, "price": 450, "label": "Автобус", "arrive": "bus",
+                                     "station": "Автостанция у метро «Парнас»", "from_pt": (60.0668, 30.3337), "link": None},
+        ("санкт-петербург", "car"): {"minutes": 130, "price": 1500, "label": "На автомобиле по А-181", "arrive": None,
+                                     "station": None, "link": None},
+    },
 }
 AUTO_TRAIN_MAX_MIN = 12 * 60  # дольше — при «Подобрать сами» летим самолётом
 DEFAULT_ROUTE = {"minutes": 300, "price": 5000, "label": "Дорога", "arrive": "train",
@@ -507,14 +522,15 @@ def sutochno_link(ctx: Ctx) -> str:
     return "https://sutochno.ru/front/searchapp/search?" + "&".join(f"{k}={quote(str(v))}" for k, v in q.items())
 
 
-OSTROVOK_CITY = {"Санкт-Петербург": "russia/st._petersburg", "Казань": "russia/kazan"}
+OSTROVOK_CITY = {"Санкт-Петербург": "russia/st._petersburg", "Казань": "russia/kazan",
+                 "Нижний Новгород": "russia/nizhniy_novgorod", "Калининград": "russia/kaliningrad", "Выборг": "russia/vyborg"}
 TRIPSTER_CITY = {"Санкт-Петербург": "Saint_Petersburg", "Казань": "Kazan", "Нижний Новгород": "Nizhny_Novgorod",
-                 "Калининград": "Kaliningrad"}
+                 "Калининград": "Kaliningrad", "Выборг": "Vyborg"}
 TRIPSTER_KINDS = ("museum", "sight", "walk", "daytrip")  # пункты, к которым предлагаем экскурсии с гидом
 
 
 AVITO_CITY = {"Санкт-Петербург": "sankt-peterburg", "Казань": "kazan", "Нижний Новгород": "nizhniy_novgorod",
-              "Калининград": "kaliningrad"}
+              "Калининград": "kaliningrad", "Выборг": "vyborg"}
 
 
 def avito_link(ctx: Ctx) -> str:
@@ -900,16 +916,18 @@ def checkin_step(ctx: Ctx, point: dict, t: int, hotel: dict, slack: int) -> tupl
 
 
 def schedule_activities(ctx: Ctx, d: DayPlan, start: int, start_point: dict, places: list[dict],
-                        lunch_done: bool, checkin: dict | None = None) -> tuple[float, list[tuple], int, dict, bool]:
+                        lunch_done: bool, checkin: dict | None = None,
+                        used: set[str] = frozenset()) -> tuple[float, list[tuple], int, dict, bool]:
     """Лучший порядок мест + место обеда. Возвращает (стоимость, шаги, время, точка, обед_был).
 
     checkin — жильё, где утром только оставили вещи: заселяемся после обеда (номер готов к тому времени
-    или ждать не больше получаса), иначе после первого места, к концу которого номер готов."""
+    или ждать не больше получаса), иначе после первого места, к концу которого номер готов.
+    used — кафе, уже стоящие в программе в другие дни: обедать в них снова не предлагаем."""
     best = None
     perms = itertools.permutations(places) if len(places) <= 6 else [tuple(places)]
     for perm in perms:
         t, point, cost, steps, had_lunch = start, start_point, 0.0, [], lunch_done
-        used_food: set[str] = set()
+        used_food: set[str] = set(used)
         pending = checkin
         for p in list(perm) + [None]:
             lunch_there = p is not None and (p.get("far") or {}).get("lunch")  # обед на выезде, в программе выезда
@@ -1115,7 +1133,7 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
     places = list(d.places)
     while True:
         cost, steps, t_end, end_point, lunch_done2 = schedule_activities(ctx, d, t, point, places, lunch_done,
-                                                                         hotel if late_checkin else None)
+                                                                         hotel if late_checkin else None, used_food)
         if fits(t_end, end_point) or not places:
             break
         optional = [p for p in places if not p.get("booked")]  # брони по билетам не выкидываем
@@ -1133,7 +1151,7 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
             break
         cand = min(extra, key=lambda p: catalog.haversine_km(here["lat"], here["lon"], p["lat"], p["lon"]) - 0.3 * score(ctx, p))
         trial = places + [cand]
-        res = schedule_activities(ctx, d, t, point, trial, lunch_done, hotel if late_checkin else None)
+        res = schedule_activities(ctx, d, t, point, trial, lunch_done, hotel if late_checkin else None, used_food)
         if not fits(res[2], res[3]) or res[0] - cost >= 400:
             ctx.used_places.add(cand["id"])  # не влезает — больше не пробуем
             ctx.skipped.add(cand["id"])

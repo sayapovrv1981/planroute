@@ -30,12 +30,13 @@ CITY_CODES = {
     "екатеринбург": "c54",
     "новосибирск": "c65",
     "сочи": "c239",
+    "выборг": "c969",
 }
 TRANSPORT_TYPES = {"train": "train", "plane": "plane", "bus": "bus"}
 
 # Адреса городов на Яндекс Путешествиях (проверены для Москвы и Петербурга)
 TRAVEL_SLUGS = {"москва": "moscow", "санкт-петербург": "saint-petersburg", "казань": "kazan",
-                "нижний новгород": "nizhny-novgorod", "калининград": "kaliningrad"}
+                "нижний новгород": "nizhny-novgorod", "калининград": "kaliningrad", "выборг": "vyborg"}
 TRAVEL_SECTION = {"train": "trains/{a}--{b}/", "bus": "buses/{a}--{b}/", "plane": "avia/routes/{a}--{b}/"}
 
 

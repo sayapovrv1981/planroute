@@ -440,7 +440,7 @@ KAZAN = dict(BASE, city="Казань", transport="plane", start_time="07:00", r
 
 class KazanTest(unittest.TestCase):
     def test_cities_from_catalog_files(self):
-        self.assertEqual(catalog.cities(), ["Казань", "Калининград", "Нижний Новгород", "Санкт-Петербург"])
+        self.assertEqual(catalog.cities(), ["Выборг", "Казань", "Калининград", "Нижний Новгород", "Санкт-Петербург"])
         self.assertEqual(catalog.normalize_city("питер"), "spb_places.json")
         self.assertEqual(catalog.normalize_city(" казань "), "kazan_places.json")
 
@@ -571,6 +571,20 @@ class TimeZoneTest(unittest.TestCase):
         back = next(i for i in trip["days"][-1]["items"] if i["kind"] == "travel" and i["cost"]["kind"] == "ticket")
         self.assertEqual(back["duration"], 150)  # 18:00 местного = 19:00 по Москве, прилёт 21:30
         self.assertEqual(planner.fmt_hm(back["end"]), "21:30")
+
+
+
+class VyborgTest(unittest.TestCase):
+    def test_from_petersburg_by_lastochka(self):
+        trip = planner.plan_trip(dict(BASE, origin="Санкт-Петербург", city="Выборг", days=2, start_date="2026-11-21",
+                                      transport="auto", wishes=""))
+        legs = [i for d in trip["days"] for i in d["items"] if i["kind"] == "travel" and i["cost"]["kind"] == "ticket"]
+        self.assertEqual([i["duration"] for i in legs], [80, 80])
+        self.assertIn("Ласточка", legs[0]["title"])
+        # в маленьком городе обедаем каждый день в новом месте
+        lunches = [i["place_id"] for d in trip["days"] for i in d["items"] if i.get("meal") == "lunch"]
+        self.assertEqual(len(lunches), len(set(lunches)))
+        self.assertTrue(lunches)
 
 
 if __name__ == "__main__":
