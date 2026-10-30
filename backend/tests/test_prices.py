@@ -81,5 +81,20 @@ class PricesTest(unittest.TestCase):
         self.assertIsNone(res["price_note"])
 
 
+
+class CityCodesTest(unittest.TestCase):
+    """Новый город без кодов — расписание и цены в форме молча пустые (так было с Казанью и Н. Новгородом)."""
+
+    def test_every_catalog_city_has_codes(self):
+        from app import catalog, planner
+        for city in catalog.cities():
+            key = city.lower()
+            self.assertIn(key, schedule.CITY_CODES, city)
+            if city != "Калининград":  # поезд через Литву Туту.ру не продаёт
+                self.assertIn(key, prices.EXPRESS, city)
+            if any(t == "plane" for _, t in planner.ROUTES.get(city, {})):
+                self.assertIn(key, prices.IATA, city)
+
+
 if __name__ == "__main__":
     unittest.main()
