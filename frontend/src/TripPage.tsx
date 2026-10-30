@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { api, dateLabel, fmtDur, fmtHM, plural, rub } from "./api";
 import { Logo, navigate, UserMenu } from "./nav";
+import { AskEdit } from "./AskEdit";
 import { AltList, OwnPhoto, Photo, StayImport } from "./Picks";
 import type { Alternative, Day, Item, Trip } from "./types";
 
@@ -171,6 +172,7 @@ export function TripPage({ id }: { id: string }) {
               Распечатать
             </button>
           </div>
+          {trip.ai_edit && <AskEdit trip={trip} onTrip={setTrip} />}
         </div>
       </section>
 

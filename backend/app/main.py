@@ -22,8 +22,8 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from . import config  # noqa: F401 — первым: читает backend/.env до остальных модулей
-from . import (address, auth, bookings, catalog, db, limits, planner, schedule, store, sutochno, tripster, wishes_ai,
-               yandexmaps)
+from . import (address, auth, bookings, catalog, db, limits, planner, schedule, store, sutochno, trip_ai, tripster,
+               wishes_ai, yandexmaps)
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -118,6 +118,7 @@ def present(tid: str, trip: dict) -> dict:
             if doc:
                 for f in doc.get("files", []):
                     f["url"] = f"/api/trips/{tid}/files/{f['name']}"
+    out["ai_edit"] = wishes_ai.available()  # поле «Поменять словами» — только если модель настроена
     return out
 
 
@@ -609,6 +610,39 @@ async def suggest(request: Request) -> JSONResponse:
                          "origin": trip["input"]["origin"] if origin else None})
 
 
+async def ask_edit(request: Request) -> JSONResponse:
+    """Просьба словами -> список предлагаемых изменений; поездка не меняется."""
+    trip = load_trip(request, request.path_params["tid"])
+    try:
+        body = await request.json()
+    except Exception:
+        return err(400, "Ожидается JSON")
+    try:
+        return JSONResponse(await run_in_threadpool(trip_ai.propose, trip, str(body.get("text") or "")))
+    except ValueError as e:
+        return err(422, str(e))
+    except Exception as e:  # сеть, ключ, лимиты модели
+        print(f"[trip_ai] {type(e).__name__}: {e}", flush=True)
+        return err(502, "Модель не ответила — попробуйте ещё раз или поменяйте программу кнопками")
+
+
+async def apply_edit(request: Request) -> JSONResponse:
+    """Подтверждённые изменения из ask_edit — применить и сохранить."""
+    tid = request.path_params["tid"]
+    trip = load_trip(request, tid)
+    try:
+        body = await request.json()
+    except Exception:
+        return err(400, "Ожидается JSON")
+    trip, applied, skipped, removed = trip_ai.apply(trip, body.get("actions"))
+    for old in removed:
+        for f in (old.get("doc") or {}).get("files", []):
+            store.delete_file(tid, f["name"])
+    if applied:
+        store.save(tid, trip)
+    return JSONResponse(dict(present(tid, trip), edit={"applied": applied, "skipped": skipped}))
+
+
 async def add_item(request: Request) -> JSONResponse:
     tid, day = request.path_params["tid"], request.path_params["day"]
     trip = load_trip(request, tid)
@@ -714,6 +748,8 @@ routes = [
     Route("/api/trips/{tid}/items/{iid}/doc/files/{name}", delete_doc_file, methods=["DELETE"]),
     Route("/api/trips/{tid}/days/{day:int}/suggest", suggest),
     Route("/api/trips/{tid}/days/{day:int}/items", add_item, methods=["POST"]),
+    Route("/api/trips/{tid}/ask", ask_edit, methods=["POST"]),
+    Route("/api/trips/{tid}/ask/apply", apply_edit, methods=["POST"]),
     Route("/api/trips/{tid}/items/{iid}/place", put_place, methods=["POST"]),
     Route("/api/trips/{tid}/items/{iid}/doc", attach_doc, methods=["POST"]),
     Route("/api/trips/{tid}/items/{iid}/doc", detach_doc, methods=["DELETE"]),

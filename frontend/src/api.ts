@@ -1,4 +1,4 @@
-import type { Alternative, Meta, Trip, TripInput } from "./types";
+import type { Alternative, AskChange, AskResult, Meta, Trip, TripInput } from "./types";
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, headers: {} };
@@ -38,6 +38,8 @@ export const api = {
       "GET",
       `/api/trips/${id}/days/${day}/suggest` + (after ? `?after=${encodeURIComponent(after)}` : ""),
     ),
+  ask: (id: string, text: string) => request<AskResult>("POST", `/api/trips/${id}/ask`, { text }),
+  applyAsk: (id: string, actions: AskChange[]) => request<Trip>("POST", `/api/trips/${id}/ask/apply`, { actions }),
   addItem: (id: string, day: number, body: { after?: string | null; place_id?: string; title?: string; duration?: number }) =>
     request<Trip>("POST", `/api/trips/${id}/days/${day}/items`, body),
 };

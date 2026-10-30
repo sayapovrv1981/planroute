@@ -136,7 +136,15 @@ export type Trip = {
   };
   days: Day[];
   budget: Budget;
+  /** правка программы словами доступна (настроена модель) */
+  ai_edit?: boolean;
+  /** итог последней правки словами */
+  edit?: { applied: string[]; skipped: string[] };
 };
+
+/** изменение программы, предложенное по просьбе словами */
+export type AskChange = { op: "remove" | "replace" | "add" | "duration"; item?: string; place?: string; day?: number; minutes?: number; label: string };
+export type AskResult = { summary: string; unclear: string; changes: AskChange[]; skipped: string[] };
 
 export type Meta = {
   /** город поездки -> город отправления -> минуты на машине */

@@ -88,6 +88,7 @@ RULES = [
     # платные и внешние сервисы: распознавание билетов, модель для пожеланий, страницы Суточно и Карт
     Rule("bookings", re.compile(r"/api/bookings$"), ("POST",), 30, 600),
     Rule("create", re.compile(r"/api/trips$"), ("POST",), 30, 600),
+    Rule("ask", re.compile(r"/api/trips/[^/]+/ask$"), ("POST",), 30, 600),
     Rule("fetch", re.compile(r"/api/(stays/preview|trips/[^/]+/items/[^/]+/place)$"), ("POST",), 30, 600),
     Rule("suggest", re.compile(r"/api/(address/suggest|schedule)$"), ("GET",), 120, 60),
     Rule("api", re.compile(r"/api/"), ("GET", "POST", "PUT", "PATCH", "DELETE"), 600, 60),
