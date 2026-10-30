@@ -440,7 +440,7 @@ KAZAN = dict(BASE, city="Казань", transport="plane", start_time="07:00", r
 
 class KazanTest(unittest.TestCase):
     def test_cities_from_catalog_files(self):
-        self.assertEqual(catalog.cities(), ["Выборг", "Казань", "Калининград", "Нижний Новгород", "Санкт-Петербург"])
+        self.assertEqual(catalog.cities(), ["Выборг", "Казань", "Калининград", "Краснодар", "Нижний Новгород", "Санкт-Петербург"])
         self.assertEqual(catalog.normalize_city("питер"), "spb_places.json")
         self.assertEqual(catalog.normalize_city(" казань "), "kazan_places.json")
 

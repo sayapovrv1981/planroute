@@ -101,6 +101,17 @@ ROUTES = {
         ("санкт-петербург", "car"): {"minutes": 130, "price": 1500, "label": "На автомобиле по А-181", "arrive": None,
                                      "station": None, "link": None},
     },
+    "Краснодар": {
+        # поезд идёт ночь и день — при «Подобрать сами» летим; аэропорт с 2025 года работает, но рейсы переносят
+        ("москва", "train"): {"minutes": 1140, "price": 4500, "label": "Поезд", "arrive": "train",
+                              "station": "Казанский вокзал", "from_pt": (55.7738, 37.6571),
+                              "link": ("Купить билет", "https://www.rzd.ru")},
+        ("москва", "plane"): {"minutes": 140, "price": 7000, "label": "Самолёт", "arrive": "airport",
+                              "station": "Аэропорт Шереметьево", "from_pt": (55.9726, 37.4146),
+                              "link": ("Найти билеты", "https://travel.yandex.ru/avia/")},
+        ("москва", "car"): {"minutes": 960, "price": 12000, "label": "На автомобиле по М-4 «Дон»", "arrive": None,
+                            "station": None, "link": None},
+    },
 }
 AUTO_TRAIN_MAX_MIN = 12 * 60  # дольше — при «Подобрать сами» летим самолётом
 DEFAULT_ROUTE = {"minutes": 300, "price": 5000, "label": "Дорога", "arrive": "train",
@@ -523,14 +534,15 @@ def sutochno_link(ctx: Ctx) -> str:
 
 
 OSTROVOK_CITY = {"Санкт-Петербург": "russia/st._petersburg", "Казань": "russia/kazan",
-                 "Нижний Новгород": "russia/nizhniy_novgorod", "Калининград": "russia/kaliningrad", "Выборг": "russia/vyborg"}
+                 "Нижний Новгород": "russia/nizhniy_novgorod", "Калининград": "russia/kaliningrad", "Выборг": "russia/vyborg",
+                 "Краснодар": "russia/krasnodar"}
 TRIPSTER_CITY = {"Санкт-Петербург": "Saint_Petersburg", "Казань": "Kazan", "Нижний Новгород": "Nizhny_Novgorod",
-                 "Калининград": "Kaliningrad", "Выборг": "Vyborg"}
+                 "Калининград": "Kaliningrad", "Выборг": "Vyborg", "Краснодар": "Krasnodar"}
 TRIPSTER_KINDS = ("museum", "sight", "walk", "daytrip")  # пункты, к которым предлагаем экскурсии с гидом
 
 
 AVITO_CITY = {"Санкт-Петербург": "sankt-peterburg", "Казань": "kazan", "Нижний Новгород": "nizhniy_novgorod",
-              "Калининград": "kaliningrad", "Выборг": "vyborg"}
+              "Калининград": "kaliningrad", "Выборг": "vyborg", "Краснодар": "krasnodar"}
 
 
 def avito_link(ctx: Ctx) -> str:
@@ -1203,11 +1215,16 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
         return items
 
     rest_needed = ti.pace in ("calm", "relaxed", "balanced") or ctx.kids
+    th_food: list[dict] = []
     if d.theatre:
-        # отдых — только если до спектакля остаётся время: ужин 60 + дороги ≈ 60
-        free = parse_hm(d.theatre["start"]) - simulate_end(ctx, items) - 60 - 60
-        home = transfer(ctx, point, hotel)  # с выезда за город обратно дольше обычных 30 минут
-        free -= max(0, (home["minutes"] if home else 0) - 30)
+        def mins(a: dict, b: dict) -> int:
+            tr = transfer(ctx, a, b)
+            return tr["minutes"] if tr else 0
+
+        # отдых — только если до спектакля остаётся время: дорога в отель, оттуда к ужину (60) и в театр
+        th_food = nearest_food(ctx, d.theatre, d.date, parse_hm(d.theatre["start"]) - 90, used_food, "dinner")
+        to_show = (mins(hotel, th_food[0]) + 60 + mins(th_food[0], d.theatre)) if th_food else mins(hotel, d.theatre)
+        free = parse_hm(d.theatre["start"]) - simulate_end(ctx, items) - mins(point, hotel) - to_show
         if rest_needed and free >= 45:
             back(True, min(90, round5(free) - 5 if free < 95 else 90))
             point = hotel
@@ -1219,9 +1236,10 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
 
     if d.theatre:
         th = d.theatre
-        f = nearest_food(ctx, th, d.date, parse_hm(th["start"]) - 90, used_food, "dinner")
+        f = th_food
         if f:
-            add(food_item(ctx, f[0], "dinner", light=True))
+            dinner = add(food_item(ctx, f[0], "dinner", light=True))
+            dinner["fixed_start"] = parse_hm(th["start"]) - dinner["duration"] - mins(f[0], th)  # к спектаклю, без ожидания
             used_food.add(f[0]["id"])
         add(attraction_item(ctx, th))
         point = th

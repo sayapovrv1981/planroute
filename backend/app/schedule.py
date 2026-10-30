@@ -31,12 +31,14 @@ CITY_CODES = {
     "новосибирск": "c65",
     "сочи": "c239",
     "выборг": "c969",
+    "краснодар": "c35",
 }
 TRANSPORT_TYPES = {"train": "train", "plane": "plane", "bus": "bus"}
 
 # Адреса городов на Яндекс Путешествиях (проверены для Москвы и Петербурга)
 TRAVEL_SLUGS = {"москва": "moscow", "санкт-петербург": "saint-petersburg", "казань": "kazan",
-                "нижний новгород": "nizhny-novgorod", "калининград": "kaliningrad", "выборг": "vyborg"}
+                "нижний новгород": "nizhny-novgorod", "калининград": "kaliningrad", "выборг": "vyborg",
+                "краснодар": "krasnodar"}
 TRAVEL_SECTION = {"train": "trains/{a}--{b}/", "bus": "buses/{a}--{b}/", "plane": "avia/routes/{a}--{b}/"}
 
 
@@ -44,7 +46,7 @@ TRAVEL_SECTION = {"train": "trains/{a}--{b}/", "bus": "buses/{a}--{b}/", "plane"
 TUTU_SLUGS = {"москва": "Moskva", "санкт-петербург": "Sankt-Peterburg"}
 # Коды городов IATA для поиска на Авиасейлс
 IATA = {"москва": "MOW", "санкт-петербург": "LED", "казань": "KZN", "нижний новгород": "GOJ",
-        "екатеринбург": "SVX", "новосибирск": "OVB", "сочи": "AER", "калининград": "KGD"}
+        "екатеринбург": "SVX", "новосибирск": "OVB", "сочи": "AER", "калининград": "KGD", "краснодар": "KRR"}
 # Партнёрские ссылки Travelpayouts: маркер и проект из личного кабинета, номер программы — у каждого оффера свой
 TP_PROGRAMS = {p: f"TP_PROGRAM_{p.upper()}" for p in ("aviasales", "tutu", "ostrovok", "sutochno", "tripster")}
 TP_DEFAULT_PROGRAM = {"aviasales": "4114", "ostrovok": "7038"}
