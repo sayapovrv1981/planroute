@@ -11,6 +11,7 @@ API Яндекс.Расписаний цены почти не отдаёт, п�
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import re
@@ -113,6 +114,40 @@ def avia_prices(origin: str, dest: str, date: str) -> dict[str, int]:
     q = urllib.parse.urlencode({"origin": a, "destination": b, "departure_at": date, "one_way": "true",
                                 "direct": "true", "sorting": "price", "limit": 30, "currency": "rub", "token": token})
     return parse_avia(_fetch(f"{AVIA_URL}?{q}"), date)
+
+
+def avia_by_day(origin: str, dest: str, month: str) -> dict[str, int]:
+    """Самая низкая цена прямого рейса на каждый день месяца (YYYY-MM): Data API хранит по одной цене на дату."""
+    token = os.environ.get("TP_TOKEN", "").strip()
+    a, b = IATA.get(_key(origin)), IATA.get(_key(dest))
+    if not token or not a or not b:
+        return {}
+    q = urllib.parse.urlencode({"origin": a, "destination": b, "departure_at": month, "one_way": "true",
+                                "direct": "true", "sorting": "price", "limit": 100, "currency": "rub", "token": token})
+    out: dict[str, int] = {}
+    for t in _fetch(f"{AVIA_URL}?{q}").get("data", []):
+        day, price = str(t.get("departure_at", ""))[:10], t.get("price")
+        if day and isinstance(price, (int, float)) and price > 0 and not t.get("transfers"):
+            out[day] = min(int(price), out.get(day, 10**9))
+    return out
+
+
+def cheaper_dates(origin: str, dest: str, date: str, around: int = 3, limit: int = 3) -> list[dict]:
+    """Соседние даты (±around дней), где самый дешёвый прямой билет дешевле, чем на выбранную: до limit самых дешёвых."""
+    try:
+        day = dt.date.fromisoformat(date)
+        days = [day + dt.timedelta(days=k) for k in range(-around, around + 1)]
+        table: dict[str, int] = {}
+        for month in sorted({d.strftime("%Y-%m") for d in days}):
+            table.update(avia_by_day(origin, dest, month))
+    except Exception as e:  # цены — не главное
+        print(f"[prices] соседние даты {origin} -> {dest} {date}: {type(e).__name__}: {e}", flush=True)
+        return []
+    today = dt.date.today()
+    here = table.get(date)
+    rows = [{"date": d.isoformat(), "price": table[d.isoformat()]} for d in days
+            if d != day and d >= today and d.isoformat() in table and (here is None or table[d.isoformat()] < here)]
+    return sorted(sorted(rows, key=lambda r: r["price"])[:limit], key=lambda r: r["date"])
 
 
 def enrich(items: list[dict], origin: str, dest: str, date: str, transport: str) -> str | None:

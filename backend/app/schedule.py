@@ -202,6 +202,19 @@ def _get(params: dict) -> dict:
         return net.get_json(req, TIMEOUT)
 
 
+def suburban(a: str, b: str, date: str) -> list[dict]:
+    """Электрички между городами (коды Яндекса); ошибка — просто без них."""
+    try:
+        items = parse(_get({"from": a, "to": b, "date": date, "transport_types": "suburban", "format": "json",
+                            "lang": "ru_RU", "limit": 100}))
+    except Exception as e:
+        print(f"[schedule] электрички {a} -> {b} {date}: {type(e).__name__}: {e}", flush=True)
+        return []
+    for it in items:
+        it["suburban"] = True
+    return items
+
+
 def search(origin: str, dest: str, date: str, transport: str) -> dict:
     if not api_key():
         return {"available": False, "items": [],
@@ -218,9 +231,15 @@ def search(origin: str, dest: str, date: str, transport: str) -> dict:
     payload = _get({"from": a, "to": b, "date": date, "transport_types": kind, "format": "json",
                     "lang": "ru_RU", "limit": 100})
     items = parse(payload)
+    if kind == "train":  # электрички — в тот же список: в Подмосковье их сравнивают с «Ласточками» по времени
+        have = {(x["departure"], x["arrival"]) for x in items}  # один рейс Яндекс может отдать и как поезд
+        items = sorted(items + [x for x in suburban(a, b, date) if (x["departure"], x["arrival"]) not in have],
+                       key=lambda x: x["departure"])
     note = prices.enrich(items, origin, dest, date, kind)
     res = {"available": True, "items": items, "buy_links": buy_links(origin, dest, transport, date),
            "price_note": note}
+    if kind == "plane":
+        res["cheaper_dates"] = prices.cheaper_dates(origin, dest, date)
     _CACHE[ck] = (time.time(), res)
     return res
 

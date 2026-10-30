@@ -82,6 +82,24 @@ class PricesTest(unittest.TestCase):
 
 
 
+class CheaperDatesTest(unittest.TestCase):
+    DAYS = {"2030-11-17": 2702, "2030-11-18": 2211, "2030-11-19": 3248, "2030-11-20": 3738, "2030-11-21": 3771,
+            "2030-11-23": 2702, "2030-11-24": 4000, "2030-12-01": 1000}
+
+    def test_only_cheaper_neighbours(self):
+        with mock.patch.object(prices, "avia_by_day", return_value=self.DAYS):
+            rows = prices.cheaper_dates("Москва", "Казань", "2030-11-20")
+        self.assertEqual(rows, [{"date": "2030-11-17", "price": 2702}, {"date": "2030-11-18", "price": 2211},
+                                {"date": "2030-11-23", "price": 2702}])  # три самых дешёвых, по датам
+
+    def test_month_boundary_and_errors(self):
+        with mock.patch.object(prices, "avia_by_day", return_value={}) as by_day:
+            prices.cheaper_dates("Москва", "Казань", "2030-11-29")
+        self.assertEqual([c.args[2] for c in by_day.call_args_list], ["2030-11", "2030-12"])
+        with mock.patch.object(prices, "avia_by_day", side_effect=OSError("нет сети")):
+            self.assertEqual(prices.cheaper_dates("Москва", "Казань", "2030-11-20"), [])
+
+
 class CityCodesTest(unittest.TestCase):
     """Новый город без кодов — расписание и цены в форме молча пустые (так было с Казанью и Н. Новгородом)."""
 

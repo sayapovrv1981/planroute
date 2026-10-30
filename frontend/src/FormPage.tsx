@@ -1132,8 +1132,8 @@ function Schedule({ f, set, transports, pick, driveMin, keep }: { f: FormState; 
   );
 }
 
-type Trip = { number: string; title: string; carrier: string; departure: string; arrival: string; next_day: boolean; duration_min: number; from: string; to: string; price_from: number | null; classes?: { name: string; price: number }[]; price_source?: string; cheapest?: boolean };
-type Sched = { available: boolean; items: Trip[]; message?: string; error?: boolean; buy_links?: { label: string; url: string; ad?: string | null }[]; price_note?: string | null };
+type Trip = { number: string; title: string; carrier: string; departure: string; arrival: string; next_day: boolean; duration_min: number; from: string; to: string; price_from: number | null; classes?: { name: string; price: number }[]; price_source?: string; cheapest?: boolean; suburban?: boolean };
+type Sched = { available: boolean; items: Trip[]; message?: string; error?: boolean; buy_links?: { label: string; url: string; ad?: string | null }[]; price_note?: string | null; cheaper_dates?: { date: string; price: number }[] };
 
 const normNum = (n: string) =>
   n.toUpperCase().replace(/[ABCEHKMOPTXY]/g, (c) => "АВСЕНКМОРТХУ"["ABCEHKMOPTXY".indexOf(c)]).replace(/[^0-9A-ZА-ЯЁ]/g, "");
@@ -1544,6 +1544,12 @@ function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, set
         </p>
       )}
       {open && sched?.price_note && shown.length > 0 && <p className="hint">{sched.price_note}</p>}
+      {open && !!sched?.cheaper_dates?.length && (
+        <p className="hint">
+          Дешевле в соседние дни (прямой рейс, по данным Авиасейлс):{" "}
+          {sched.cheaper_dates.map((c) => `${dateLabel(c.date)} — от ${c.price.toLocaleString("ru-RU")} ₽`).join(" · ")}
+        </p>
+      )}
       {open && sched && shown.length > 0 && (
         <ul className="trips" ref={listRef} aria-label={`Расписание: ${l.title}`}>
           {shown.map((t) => (
@@ -1564,6 +1570,7 @@ function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, set
                 </b>
                 <span>
                   {[t.number, t.title].filter(Boolean).join(" · ")}
+                  {t.suburban && <em className="tag soft">электричка</em>}
                   {t.cheapest && <em className="tag cheap">самый дешёвый</em>}
                   {t === selected ? (
                     <em className="tag">выбран</em>

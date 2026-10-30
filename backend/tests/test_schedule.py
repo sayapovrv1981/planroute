@@ -39,7 +39,7 @@ class ScheduleTest(unittest.TestCase):
             with mock.patch.object(schedule, "_get", return_value=SAMPLE) as get:
                 schedule.search("Москва", "Санкт-Петербург", "2026-10-27", "train")
                 schedule.search("Москва", "Санкт-Петербург", "2026-10-27", "train")
-        self.assertEqual(get.call_count, 1)
+        self.assertEqual(get.call_count, 2)  # поезда и электрички — один раз
 
     def test_parse_sorted_with_prices_and_overnight(self):
         items = schedule.parse(SAMPLE)
@@ -66,10 +66,24 @@ class ScheduleTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"YANDEX_RASP_API_KEY": "k"}):
             with mock.patch.object(schedule, "_get", return_value=SAMPLE) as get:
                 res = schedule.search("Москва", "Санкт-Петербург", "2026-10-27", "train")
-        params = get.call_args[0][0]
+        params = get.call_args_list[0][0][0]
         self.assertEqual((params["from"], params["to"], params["transport_types"]), ("c213", "c2", "train"))
+        self.assertEqual(get.call_args_list[1][0][0]["transport_types"], "suburban")
         self.assertTrue(res["available"])
-        self.assertEqual(len(res["items"]), 3)
+        self.assertEqual(len(res["items"]), 3)  # те же рейсы электричками не повторяются
+
+    def test_suburban_in_train_list(self):
+        sub = {"segments": [{"departure": "2026-10-27T08:10:00+03:00", "arrival": "2026-10-27T09:40:00+03:00",
+                             "duration": 5400.0, "from": {"title": "Москва (Ярославский вокзал)"},
+                             "to": {"title": "Сергиев Посад"}, "thread": {"number": "6001", "title": "Москва — Александров"},
+                             "tickets_info": {"places": [{"price": {"whole": 330}}]}}]}
+        with mock.patch.dict(os.environ, {"YANDEX_RASP_API_KEY": "k"}):
+            with mock.patch.object(schedule, "_get", side_effect=lambda p: sub if p["transport_types"] == "suburban" else SAMPLE), \
+                    mock.patch.object(schedule.prices, "enrich", return_value=None):  # без сети
+                res = schedule.search("Москва", "Санкт-Петербург", "2026-10-27", "train")
+        el = [x for x in res["items"] if x.get("suburban")]
+        self.assertEqual([(x["number"], x["price_from"]) for x in el], [("6001", 330)])
+        self.assertEqual([x["departure"] for x in res["items"]][:2], ["07:00", "08:10"])  # по времени вместе с поездами
 
     def test_travel_url(self):
         self.assertEqual(schedule.travel_url("Москва", "Санкт-Петербург", "plane", "2026-10-27"),
