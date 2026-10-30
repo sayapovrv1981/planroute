@@ -359,6 +359,7 @@ function ItemRow({
                 )}
               </h3>
               {it.note && <p className="note">{it.note}</p>}
+              {!!it.why?.length && <p className="why">Почему здесь: {it.why.join(" · ")}</p>}
               {it.href_ad && <small className="ad-mark">{it.href_ad}</small>}
             </div>
             {sight && canReplace && <div className="title-action">{replaceBtn}</div>}

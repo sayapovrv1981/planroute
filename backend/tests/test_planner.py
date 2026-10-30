@@ -526,6 +526,26 @@ class KazanTest(unittest.TestCase):
         self.assertFalse(any({"daytrip", "theatre"} <= k for k in kinds))
 
 
+class WhyTest(unittest.TestCase):
+    def test_reasons_follow_the_choice(self):
+        trip = planner.plan_trip(dict(KAZAN, days=3, kids_ages=[8], tags=["history", "local_food"],
+                                      wishes="хотим в Свияжск и в театр"))
+        why = {i["place_id"]: i["why"] for i in items(trip) if i.get("place_id") and "why" in i}
+        self.assertIn("вы просили", why["sviyazhsk"])
+        self.assertIn("одно из главных мест города", why["sviyazhsk"])
+        self.assertTrue(any("ваши интересы: история" in w for w in why.values()))
+        theatre = next(i for i in items(trip) if i["kind"] == "theatre")
+        self.assertIn("вы хотели в театр", theatre["why"])
+        sights = [i for i in items(trip) if i["kind"] in ("museum", "sight", "walk", "daytrip")]
+        self.assertTrue(all(i["why"] for i in sights))  # у каждого места есть причина
+
+    def test_user_choice(self):
+        trip = planner.plan_trip(dict(KAZAN, days=2))
+        it = next(i for i in items(trip) if i["kind"] in ("museum", "sight", "walk") and i["alternatives"])
+        planner.replace_place(trip, it["id"], it["alternatives"][0])
+        self.assertEqual(it["why"], ["вы выбрали сами"])
+
+
 class NightTrainTest(unittest.TestCase):
     NIGHT = dict(BASE, city="Казань", start_date="2026-11-20", transport="train", start_time="22:10",
                  arrive_time="09:05", return_time="21:00", wishes="")

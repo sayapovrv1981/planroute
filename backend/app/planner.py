@@ -655,6 +655,34 @@ def make_item(kind: str, title: str, duration: int, *, place: dict | None = None
     }
 
 
+WHY_OWN = "вы выбрали сами"
+GENRE_WISH = {"circus": "вы хотели в цирк", "opera": "вы хотели на оперу или балет"}
+
+
+def why_place(ctx: Ctx, p: dict) -> list[str]:
+    """«Почему это место» — те же причины, по которым его выбрал score: просьба, интересы, дети, важность."""
+    out = []
+    if asked_for(ctx, p) or p["id"] in ctx.must:
+        out.append("вы просили")
+    elif p["category"] == "theatre":
+        genre = p.get("genre")
+        out.append(GENRE_WISH[genre] if genre in GENRE_WISH and genre in ctx.wishes else "вы хотели в театр")
+    hits = [INTERESTS[t].lower() for t in p.get("tags", []) if t in ctx.wishes and t in INTERESTS]
+    if hits:
+        out.append("ваши интересы: " + ", ".join(hits))
+    if ctx.kids and p.get("kids_bonus"):
+        out.append("интересно детям")
+    if p["category"] != "food":
+        prio = p.get("priority", 1)
+        if prio >= 5:
+            out.append("одно из главных мест города")
+        elif prio == 4 and not out:
+            out.append("стоит увидеть")
+        elif not out:  # второстепенные места добираются по близости к остальным
+            out.append("по пути, рядом с другими местами дня")
+    return out
+
+
 def attraction_item(ctx: Ctx, p: dict) -> dict:
     kind = {"museum": "museum", "theatre": "theatre", "landmark": "sight", "daytrip": "daytrip",
             "excursion": "excursion", "event": "event"}.get(p["category"], "walk")
@@ -664,6 +692,7 @@ def attraction_item(ctx: Ctx, p: dict) -> dict:
     it = make_item(kind, p["name"], dur, place=p, note=p.get("note", ""),
                    fixed=fixed, cost_kind=cost_kind, estimate=place_cost(ctx, p), links=links_for(ctx, p))
     it["far"] = p.get("far")
+    it["why"] = why_place(ctx, p)
     return it
 
 
@@ -688,6 +717,7 @@ def food_item(ctx: Ctx, p: dict, meal: str, light: bool = False) -> dict:
     it = make_item("food", f"{title} · {p['name']}", dur, place=p, note=" · ".join(n for n in parts if n),
                    cost_kind="receipt", estimate=food_cost(ctx, p, light), links=links_for(ctx, p))
     it["meal"] = "dinner_light" if light and meal == "dinner" else meal
+    it["why"] = why_place(ctx, p)
     return it
 
 
@@ -1586,6 +1616,7 @@ def replace_place(trip: dict, item_id: str, place_id: str) -> dict:
     keep_fixed = it.get("fixed_start") if it["kind"] == "rest" or it.get("meal") == "breakfast" else None
     for key in ("title", "note", "place_id", "lat", "lon", "duration", "default_duration", "cost", "links", "fixed_start", "kind", "meal", "far"):
         it[key] = new[key]
+    it["why"] = [WHY_OWN]
     if keep_fixed is not None:
         it["fixed_start"] = keep_fixed
     it["docs"] = []
@@ -1818,6 +1849,7 @@ def add_item(trip: dict, day_index: int, after_id: str | None, place_id: str | N
             raise ValueError("Укажите, что добавить")
         it = make_item("custom", name, max(ctx.ti.step_min, min(600, int(duration or 60))), note="Добавлено вами")
     it["user_changed"] = True
+    it["why"] = [WHY_OWN] if place_id else []
     used = {i["place_id"] for dd in trip["days"] for i in dd["items"] if i.get("place_id")}
     it["alternatives"] = alternatives_for(ctx, it, day, used)
     idx = insert_pos(d, after_id)

@@ -47,6 +47,8 @@ export type Item = {
   stay_role?: string;
   title: string;
   note: string;
+  /** почему планировщик выбрал это место: «вы просили», «ваши интересы: история», «одно из главных мест города» */
+  why?: string[];
   place_id: string | null;
   lat: number | null;
   lon: number | null;
