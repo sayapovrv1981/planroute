@@ -38,7 +38,7 @@ TRANSPORT_TYPES = {"train": "train", "plane": "plane", "bus": "bus"}
 # Адреса городов на Яндекс Путешествиях (проверены для Москвы и Петербурга)
 TRAVEL_SLUGS = {"москва": "moscow", "санкт-петербург": "saint-petersburg", "казань": "kazan",
                 "нижний новгород": "nizhny-novgorod", "калининград": "kaliningrad", "выборг": "vyborg",
-                "краснодар": "krasnodar"}
+                "краснодар": "krasnodar", "сочи": "sochi"}
 TRAVEL_SECTION = {"train": "trains/{a}--{b}/", "bus": "buses/{a}--{b}/", "plane": "avia/routes/{a}--{b}/"}
 
 

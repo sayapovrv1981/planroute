@@ -16,6 +16,13 @@
   базу разработки и живую базу не трогают. Новый тест-файл тоже начинайте с `import testdb`.
 - На Mac (`/Users/ruslan/planroute`) systemd нет: сервер — `bash scripts/run.sh` или F5 в VS Code.
 
+## Рабочий сервер https://planroute.ru
+
+- Облачный сервер reg.ru `5.63.152.234` (`ssh root@5.63.152.234`), Docker Compose в `/opt/planroute`, nginx и certbot.
+  Выкладка и логи — README, «База, файлы и запуск на сервере». Выкладываем только по просьбе пользователя.
+- Там живые аккаунты: не регистрируйте пробные, проверки — тестами и `e2e_smoke.py` на Mac.
+- DNS домена — в панели хостинга reg.ru; записи почты (MX, `mail`, SPF) не трогать.
+
 ## Запуск на прежнем сервере (systemd)
 
 - До выкладки версии с PostgreSQL на сервере: `manage.py devdb start` (или свой PostgreSQL и `DATABASE_URL`),

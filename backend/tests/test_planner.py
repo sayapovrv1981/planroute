@@ -440,7 +440,7 @@ KAZAN = dict(BASE, city="Казань", transport="plane", start_time="07:00", r
 
 class KazanTest(unittest.TestCase):
     def test_cities_from_catalog_files(self):
-        self.assertEqual(catalog.cities(), ["Выборг", "Казань", "Калининград", "Краснодар", "Нижний Новгород", "Санкт-Петербург"])
+        self.assertEqual(catalog.cities(), ["Выборг", "Казань", "Калининград", "Краснодар", "Нижний Новгород", "Санкт-Петербург", "Сочи"])
         self.assertEqual(catalog.normalize_city("питер"), "spb_places.json")
         self.assertEqual(catalog.normalize_city(" казань "), "kazan_places.json")
 
@@ -605,6 +605,25 @@ class VyborgTest(unittest.TestCase):
         lunches = [i["place_id"] for d in trip["days"] for i in d["items"] if i.get("meal") == "lunch"]
         self.assertEqual(len(lunches), len(set(lunches)))
         self.assertTrue(lunches)
+
+
+
+class SochiSeasonTest(unittest.TestCase):
+    SOCHI = dict(BASE, city="Сочи", days=4, transport="auto", start_time="09:00", return_time="19:00", wishes="",
+                 budget=150000)
+
+    def ids(self, start):
+        return {i["place_id"] for i in items(planner.plan_trip(dict(self.SOCHI, start_date=start)))}
+
+    def test_summer_sea_and_mountains(self):
+        ids = self.ids("2026-07-15")
+        self.assertIn("polyana", ids)  # выезд в горы не вытесняется местами города
+        self.assertNotIn("ski", ids)
+
+    def test_winter_no_beach(self):
+        ids = self.ids("2027-01-20")
+        self.assertIn("ski", ids)
+        self.assertFalse(ids & {"beach", "boat", "polyana"})  # и в вечерней прогулке пляжа нет
 
 
 if __name__ == "__main__":

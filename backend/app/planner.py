@@ -113,6 +113,17 @@ ROUTES = {
         ("москва", "car"): {"minutes": 960, "price": 12000, "label": "На автомобиле по М-4 «Дон»", "arrive": None,
                             "station": None, "link": None},
     },
+    "Сочи": {
+        # поезд идёт сутки и больше — при «Подобрать сами» летим; аэропорт в Адлере, до центра 40–60 минут
+        ("москва", "train"): {"minutes": 1500, "price": 5000, "label": "Поезд", "arrive": "train",
+                              "station": "Казанский вокзал", "from_pt": (55.7738, 37.6571),
+                              "link": ("Купить билет", "https://www.rzd.ru")},
+        ("москва", "plane"): {"minutes": 160, "price": 7500, "label": "Самолёт", "arrive": "airport",
+                              "station": "Аэропорт Шереметьево", "from_pt": (55.9726, 37.4146),
+                              "link": ("Найти билеты", "https://travel.yandex.ru/avia/")},
+        ("москва", "car"): {"minutes": 1260, "price": 15000, "label": "На автомобиле по М-4 «Дон»", "arrive": None,
+                            "station": None, "link": None},
+    },
 }
 AUTO_TRAIN_MAX_MIN = 12 * 60  # дольше — при «Подобрать сами» летим самолётом
 DEFAULT_ROUTE = {"minutes": 300, "price": 5000, "label": "Дорога", "arrive": "train",
@@ -536,14 +547,16 @@ def sutochno_link(ctx: Ctx) -> str:
 
 OSTROVOK_CITY = {"Санкт-Петербург": "russia/st._petersburg", "Казань": "russia/kazan",
                  "Нижний Новгород": "russia/nizhniy_novgorod", "Калининград": "russia/kaliningrad", "Выборг": "russia/vyborg",
-                 "Краснодар": "russia/krasnodar"}
+                 "Краснодар": "russia/krasnodar", "Сочи": "russia/sochi"}
 TRIPSTER_CITY = {"Санкт-Петербург": "Saint_Petersburg", "Казань": "Kazan", "Нижний Новгород": "Nizhny_Novgorod",
-                 "Калининград": "Kaliningrad", "Выборг": "Vyborg", "Краснодар": "Krasnodar"}
+                 "Калининград": "Kaliningrad", "Выборг": "Vyborg", "Краснодар": "Krasnodar",
+                 "Сочи": "Sochi"}
 TRIPSTER_KINDS = ("museum", "sight", "walk", "daytrip")  # пункты, к которым предлагаем экскурсии с гидом
 
 
 AVITO_CITY = {"Санкт-Петербург": "sankt-peterburg", "Казань": "kazan", "Нижний Новгород": "nizhniy_novgorod",
-              "Калининград": "kaliningrad", "Выборг": "vyborg", "Краснодар": "krasnodar"}
+              "Калининград": "kaliningrad", "Выборг": "vyborg", "Краснодар": "krasnodar",
+              "Сочи": "sochi"}
 
 
 def avito_link(ctx: Ctx) -> str:
@@ -1168,9 +1181,12 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
     def fits(t_end: int, end_point: dict) -> bool:
         if d.kind in ("last", "single"):  # к поезду — от последнего места, а не от центра
             return t_end + to_station(end_point) <= ret - ctx.back_boarding
-        if d.theatre:  # дорога к театру, лёгкий ужин рядом с ним (60) и переход от кафе (≈ 20)
-            tr = transfer(ctx, end_point, d.theatre)
-            return t_end + (tr["minutes"] if tr else 0) + 60 + 20 <= parse_hm(d.theatre["start"])
+        if d.theatre:  # дорога к лёгкому ужину (60) у театра и от кафе к спектаклю — через то кафе, что выберем потом
+            start = parse_hm(d.theatre["start"])
+            f = nearest_food(ctx, d.theatre, d.date, start - 90, used_food, "dinner")
+            legs = [transfer(ctx, end_point, f[0]), transfer(ctx, f[0], d.theatre)] if f else [
+                transfer(ctx, end_point, d.theatre), {"minutes": 20}]
+            return t_end + sum(tr["minutes"] for tr in legs if tr) + 60 <= start
         return t_end <= window_end
 
     places = list(d.places)
@@ -1182,7 +1198,9 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
         optional = [p for p in places if not p.get("booked")]  # брони по билетам не выкидываем
         if not optional:
             break
-        dropped = min(optional, key=lambda p: score(ctx, p))  # не помещается — убираем наименее важное
+        # не помещается — убираем наименее важное; выезд за город — главное в своём дне, его в последнюю очередь
+        spare = [p for p in optional if p["category"] != "daytrip"] or optional
+        dropped = min(spare, key=lambda p: score(ctx, p))
         places.remove(dropped)
         ctx.used_places.discard(dropped["id"])
     # Осталось много свободного времени — добираем ближайшие места; при спокойном темпе это время отдыха
@@ -1300,7 +1318,7 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
 def evening_walk(ctx: Ctx, point: dict, d: DayPlan) -> dict | None:
     used = ctx.used_places | {p["id"] for p in d.places}  # и места других дней — чтобы не повторять
     walks = [p for p in ctx.places("walk", "landmark") if p["id"] not in used and not p.get("hours")
-             and score(ctx, p) > -5]
+             and opening(p, d.date) is not None and score(ctx, p) > -5]  # пляж зимой — не прогулка
     if not walks:
         return None
     ev = min(walks, key=lambda p: catalog.haversine_km(point["lat"], point["lon"], p["lat"], p["lon"]))
