@@ -114,5 +114,12 @@ class CityCodesTest(unittest.TestCase):
                 self.assertIn(key, prices.IATA, city)
 
 
+
+class TutuEmptyTest(unittest.TestCase):
+    def test_no_long_distance_trains(self):
+        # Москва — Коломна: только электрички, Туту.ру на запрос цен отвечает пустым списком
+        self.assertEqual(prices.parse_tutu([]), {})
+
+
 if __name__ == "__main__":
     unittest.main()

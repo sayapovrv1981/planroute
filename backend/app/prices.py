@@ -27,7 +27,8 @@ AVIA_URL = os.environ.get("AVIA_API_URL", "https://api.travelpayouts.com/aviasal
 # Коды станций «Экспресс» для городов (все вокзалы города; где такого нет — главный вокзал).
 # Найти код: https://www.tutu.ru/suggest/railway_simple/?name=<город>. Калининград Туту.ру не продаёт (поезд через Литву)
 EXPRESS = {"москва": 2000000, "санкт-петербург": 2004000, "казань": 2060500, "нижний новгород": 2060000,
-           "выборг": 2004682, "краснодар": 2064788, "сочи": 2064130, "владимир": 2060340, "ярославль": 2010000}
+           "выборг": 2004682, "краснодар": 2064788, "сочи": 2064130, "владимир": 2060340, "ярославль": 2010000,
+           "коломна": 2000650}
 IATA = {"москва": "MOW", "санкт-петербург": "LED", "казань": "KZN", "нижний новгород": "GOJ",
         "екатеринбург": "SVX", "новосибирск": "OVB", "сочи": "AER", "калининград": "KGD", "краснодар": "KRR"}
 CAR_CLASS = {"sedentary": "сидячий", "plazcard": "плацкарт", "coupe": "купе", "lux": "СВ", "soft": "люкс"}
@@ -61,9 +62,11 @@ def _fetch(url: str) -> dict:
     return json.loads(m.group(1) if m else text)
 
 
-def parse_tutu(payload: dict) -> dict[str, list[dict]]:
+def parse_tutu(payload: dict | list) -> dict[str, list[dict]]:
     """Номер поезда → цены по типам вагонов, от дешёвого."""
     out: dict[str, list[dict]] = {}
+    if not isinstance(payload, dict):  # поездов дальнего следования нет (Москва — Коломна) — Туту.ру отдаёт []
+        return out
     for t in payload.get("trips", []):
         num = train_key(t.get("trainNumber", ""))
         if not num:

@@ -124,6 +124,17 @@ ROUTES = {
         ("москва", "car"): {"minutes": 1260, "price": 15000, "label": "На автомобиле по М-4 «Дон»", "arrive": None,
                             "station": None, "link": None},
     },
+    "Коломна": {
+        # электрички и экспрессы с Казанского вокзала до станции Коломна (у Старой Коломны) и Голутвина:
+        # экспресс ≈ 1 ч 50 мин, обычная электричка ≈ 2 ч 30 мин; автобусы — от метро «Котельники»
+        ("москва", "train"): {"minutes": 135, "price": 500, "label": "Электричка или экспресс", "arrive": "train",
+                              "station": "Казанский вокзал", "from_pt": (55.7738, 37.6571),
+                              "link": ("Купить билет", "https://www.tutu.ru/prigorod/")},
+        ("москва", "bus"): {"minutes": 130, "price": 450, "label": "Автобус от метро «Котельники»", "arrive": "bus",
+                            "station": "Автостанция «Котельники»", "from_pt": (55.6743, 37.8582), "link": None},
+        ("москва", "car"): {"minutes": 120, "price": 1600, "label": "На автомобиле по М-5 «Урал»", "arrive": None,
+                            "station": None, "link": None},
+    },
 }
 AUTO_TRAIN_MAX_MIN = 12 * 60  # дольше — при «Подобрать сами» летим самолётом
 DEFAULT_ROUTE = {"minutes": 300, "price": 5000, "label": "Дорога", "arrive": "train",
@@ -555,16 +566,16 @@ def sutochno_link(ctx: Ctx) -> str:
 
 OSTROVOK_CITY = {"Санкт-Петербург": "russia/st._petersburg", "Казань": "russia/kazan",
                  "Нижний Новгород": "russia/nizhniy_novgorod", "Калининград": "russia/kaliningrad", "Выборг": "russia/vyborg",
-                 "Краснодар": "russia/krasnodar", "Сочи": "russia/sochi"}
+                 "Краснодар": "russia/krasnodar", "Сочи": "russia/sochi", "Коломна": "russia/kolomna"}
 TRIPSTER_CITY = {"Санкт-Петербург": "Saint_Petersburg", "Казань": "Kazan", "Нижний Новгород": "Nizhny_Novgorod",
                  "Калининград": "Kaliningrad", "Выборг": "Vyborg", "Краснодар": "Krasnodar",
-                 "Сочи": "Sochi"}
+                 "Сочи": "Sochi", "Коломна": "Kolomna"}
 TRIPSTER_KINDS = ("museum", "sight", "walk", "daytrip")  # пункты, к которым предлагаем экскурсии с гидом
 
 
 AVITO_CITY = {"Санкт-Петербург": "sankt-peterburg", "Казань": "kazan", "Нижний Новгород": "nizhniy_novgorod",
               "Калининград": "kaliningrad", "Выборг": "vyborg", "Краснодар": "krasnodar",
-              "Сочи": "sochi"}
+              "Сочи": "sochi", "Коломна": "kolomna"}
 
 
 def avito_link(ctx: Ctx) -> str:

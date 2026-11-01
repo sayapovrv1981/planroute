@@ -445,7 +445,7 @@ KAZAN = dict(BASE, city="Казань", transport="plane", start_time="07:00", r
 
 class KazanTest(unittest.TestCase):
     def test_cities_from_catalog_files(self):
-        self.assertEqual(catalog.cities(), ["Выборг", "Казань", "Калининград", "Краснодар", "Нижний Новгород", "Санкт-Петербург", "Сочи"])
+        self.assertEqual(catalog.cities(), ["Выборг", "Казань", "Калининград", "Коломна", "Краснодар", "Нижний Новгород", "Санкт-Петербург", "Сочи"])
         self.assertEqual(catalog.normalize_city("питер"), "spb_places.json")
         self.assertEqual(catalog.normalize_city(" казань "), "kazan_places.json")
 
@@ -661,6 +661,28 @@ class FoodOffersTest(unittest.TestCase):
         self.assertIn({"label": "Меню и цены — Яндекс Карты", "url": "https://yandex.ru/maps/org/123/menu/"}, lunch["links"])
         self.assertEqual(lunch["links"][-1]["url"], "https://yandex.ru/maps/org/123/")
         self.assertNotIn("бизнес-ланч", planner.food_item(ctx, p, "dinner")["note"])  # вечером ланча нет
+
+
+
+class KolomnaTest(unittest.TestCase):
+    def test_day_trip_from_moscow(self):
+        # Коломна — поездка на день: электричка с Казанского вокзала, кремль и музей пастилы или калача
+        trip = planner.plan_trip(dict(BASE, city="Коломна", days=1, start_date="2026-11-21", transport="auto",
+                                      start_time="08:00", return_time="18:00", wishes=""))
+        items = trip["days"][0]["items"]
+        legs = [i for i in items if i["kind"] == "travel" and i["cost"]["kind"] == "ticket"]
+        self.assertEqual(len(legs), 2)
+        self.assertIn("Электричка", legs[0]["title"])
+        ids = {i.get("place_id") for i in items}
+        self.assertIn("kremlin", ids)
+        self.assertTrue(ids & {"pastila", "kalachnaya"}, [i["title"] for i in items])
+        self.assertFalse([w for i in items for w in i["warnings"] if "Не успеваете" in w])
+
+    def test_weekend_with_hotel(self):
+        trip = planner.plan_trip(dict(BASE, city="Коломна", days=2, start_date="2026-11-21", transport="train", wishes=""))
+        self.assertTrue(any(i.get("stay_role") == "checkin" for i in trip["days"][0]["items"]))
+        lunches = [i["place_id"] for d in trip["days"] for i in d["items"] if i.get("meal") == "lunch"]
+        self.assertEqual(len(lunches), len(set(lunches)))
 
 
 if __name__ == "__main__":

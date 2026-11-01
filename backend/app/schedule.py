@@ -32,6 +32,7 @@ CITY_CODES = {
     "новосибирск": "c65",
     "сочи": "c239",
     "выборг": "c969",
+    "коломна": "c10734",
     "краснодар": "c35",
 }
 TRANSPORT_TYPES = {"train": "train", "plane": "plane", "bus": "bus"}
@@ -39,7 +40,7 @@ TRANSPORT_TYPES = {"train": "train", "plane": "plane", "bus": "bus"}
 # Адреса городов на Яндекс Путешествиях (проверены для Москвы и Петербурга)
 TRAVEL_SLUGS = {"москва": "moscow", "санкт-петербург": "saint-petersburg", "казань": "kazan",
                 "нижний новгород": "nizhny-novgorod", "калининград": "kaliningrad", "выборг": "vyborg",
-                "краснодар": "krasnodar", "сочи": "sochi"}
+                "краснодар": "krasnodar", "сочи": "sochi", "коломна": "kolomna"}
 TRAVEL_SECTION = {"train": "trains/{a}--{b}/", "bus": "buses/{a}--{b}/", "plane": "avia/routes/{a}--{b}/"}
 
 
