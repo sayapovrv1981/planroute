@@ -69,6 +69,18 @@ git archive --format=tar HEAD | ssh root@5.63.152.234 'tar -x -C /opt/planroute 
 
 Логи — `ssh root@5.63.152.234 'cd /opt/planroute && docker compose logs app --tail 50'`.
 
+**Резервные копии:** `scripts/backup.sh` каждый день в 04:30 (systemd-таймер `planroute-backup`, файлы
+`scripts/planroute-backup.*` скопированы в `/etc/systemd/system/`) кладёт в `/opt/backups` копию базы `db-<дата>.dump`
+(`pg_dump -Fc`, сразу проверяется `pg_restore --list`) и документы `uploads-<дата>.tar.gz`, если они есть на диске;
+хранит 14 дней. Сделать копию сейчас — `systemctl start planroute-backup`, результат — `journalctl -u planroute-backup`.
+Восстановить базу из копии (приложение на это время остановить):
+
+```
+cd /opt/planroute && docker compose stop app
+docker compose exec -T db pg_restore -U tripplan -d tripplan --clean --if-exists --no-owner < /opt/backups/db-<дата>.dump
+docker compose start app
+```
+
 Данные — в PostgreSQL (`DATABASE_URL`), схема — миграции Alembic в `backend/migrations/`, файлы документов —
 на диске или в S3-совместимом хранилище (`STORAGE=s3`, Yandex Object Storage). Все настройки сервера —
 в `app/config.py`, образец — `backend/.env.example`. Команды — из папки `backend`:

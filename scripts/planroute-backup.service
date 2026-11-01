@@ -1,0 +1,8 @@
+[Unit]
+Description=Резервная копия planroute (база и документы)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/planroute/scripts/backup.sh
