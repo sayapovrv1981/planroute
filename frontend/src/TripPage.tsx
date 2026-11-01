@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { api, dateLabel, fmtDur, fmtHM, plural, rub } from "./api";
-import { Logo, navigate, UserMenu } from "./nav";
+import { Logo, navigate, TopNav, UserMenu } from "./nav";
 import { AskEdit } from "./AskEdit";
 import { AltList, OwnPhoto, Photo, StayImport } from "./Picks";
 import type { Alternative, Day, Item, Trip } from "./types";
@@ -123,7 +123,7 @@ export function TripPage({ id }: { id: string }) {
       <header className="top">
         <div className="wrap top-bar">
           <Logo />
-          <nav className="top-nav" aria-label="Основное меню">
+          <TopNav>
             <a
               href={`/?edit=${trip.id}`}
               onClick={(e) => {
@@ -143,7 +143,7 @@ export function TripPage({ id }: { id: string }) {
               Новая поездка
             </a>
             <UserMenu />
-          </nav>
+          </TopNav>
         </div>
       </header>
 

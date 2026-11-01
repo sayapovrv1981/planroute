@@ -162,6 +162,11 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(planner.fmt_hm(first[0]["start"]), "07:45")
         self.assertIn("Тверская", first[0]["note"])
         self.assertTrue(first[0]["links"])
+        self.assertIn("rtext=~55.", first[0]["links"][0]["url"])  # без координат дома — от «Моего местоположения»
+        t = planner.plan_trip(dict(BASE, home_address="Москва, Тверская 1", home_pt=[55.757, 37.613]))
+        url = t["days"][0]["items"][0]["links"][0]["url"]
+        self.assertIn("rtext=55.757,37.613~55.", url)
+        self.assertNotIn("%", url)
         museum = next(i for i in items(t) if i["kind"] == "museum")
         self.assertEqual(museum["duration"], museum["default_duration"])
         with self.assertRaises(ValueError):

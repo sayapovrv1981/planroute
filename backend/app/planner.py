@@ -170,6 +170,7 @@ class TripInput:
     return_time: str = "18:00"
     end_date: str | None = None          # дата возвращения; если задана, days считается из дат
     home_address: str = ""               # адрес, откуда выходим из дома
+    home_pt: list | None = None          # его координаты [lat, lon] из подсказки адреса
     to_station_min: int = 40             # дорога от дома до вокзала/аэропорта, мин
     boarding_min: int | None = None      # запас на посадку; None — по виду транспорта
     sight_buffer_min: int = 0            # запас к каждой достопримечательности, мин
@@ -248,6 +249,11 @@ class TripInput:
             except (TypeError, ValueError):
                 v = 0
             setattr(self, f, min(max(v, 0), 500_000))
+        try:
+            lat, lon = (float(v) for v in self.home_pt)
+            self.home_pt = [lat, lon] if -90 <= lat <= 90 and -180 <= lon <= 180 else None
+        except (TypeError, ValueError):
+            self.home_pt = None
         if not isinstance(self.wishes_ai, dict):
             self.wishes_ai = None
         if not isinstance(self.stay_manual, dict) or not str(self.stay_manual.get("name") or "").strip():
@@ -1112,9 +1118,12 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
             home = ti.home_address.strip()
             go_links = []
             if home and route.get("from_pt"):
+                # точки — координатами: адрес текстом с запятыми Яндекс Карты разбирают как попало;
+                # без координат дома (адрес вписан без подсказки) маршрут строится от «Моего местоположения»
                 lat, lon = route["from_pt"]
+                start = f"{ti.home_pt[0]},{ti.home_pt[1]}" if ti.home_pt else ""
                 go_links = [{"label": "Маршрут до вокзала в Яндекс Картах",
-                             "url": f"https://yandex.ru/maps/?rtext={quote(home)}~{lat},{lon}&rtt=mt"}]
+                             "url": f"https://yandex.ru/maps/?rtext={start}~{lat},{lon}&rtt=mt"}]
             go = make_item("travel", "Выход из дома", ti.to_station_min, fixed=dep - ctx.boarding - ti.to_station_min,
                            note=(f"{home} → {station}" if home else f"Дорога до места отправления: {station}")
                            + f", ≈ {fmt_dur(ti.to_station_min)}", links=go_links)

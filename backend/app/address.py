@@ -123,6 +123,16 @@ def departure_point(origin: str, transport: str, city: str = "") -> tuple[str, t
     return route["station"], route["from_pt"]
 
 
+def locate(full: str, city: str = "") -> list[float] | None:
+    """Координаты адреса, вписанного без подсказки (для маршрута до вокзала); сбой сервиса — None."""
+    try:
+        found = [x for x in fetch(full, None, city, count=1) if x["lat"] is not None]
+    except (OSError, ValueError) as e:
+        print(f"[address] не нашли {full!r}: {type(e).__name__}: {e}", flush=True)
+        return None
+    return [found[0]["lat"], found[0]["lon"]] if found else None
+
+
 def estimate_minutes(lat: float, lon: float, to: tuple[float, float]) -> int:
     km = catalog.haversine_km(lat, lon, to[0], to[1]) * 1.3
     return planner.round5(15 + km / 25 * 60)

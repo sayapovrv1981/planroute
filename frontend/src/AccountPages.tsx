@@ -1,6 +1,6 @@
 import { useContext, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Logo, navigate, UserContext, UserMenu } from "./nav";
+import { Logo, navigate, UserContext, TopNav, UserMenu } from "./nav";
 import type { User } from "./nav";
 
 type TripRow = { id: string; title: string; city: string; dates: string; people: string; updated: string };
@@ -330,12 +330,12 @@ export function MyTripsPage() {
       <header className="top">
         <div className="wrap top-bar">
           <Logo />
-          <nav className="top-nav" aria-label="Основное меню">
+          <TopNav>
             <a href="/?new" onClick={open("/?new")}>
               Новая поездка
             </a>
             <UserMenu />
-          </nav>
+          </TopNav>
         </div>
         <div className="wrap hero auth-hero">
           <h1>Мои поездки</h1>
@@ -391,12 +391,12 @@ export function AccountPage() {
       <header className="top">
         <div className="wrap top-bar">
           <Logo />
-          <nav className="top-nav" aria-label="Основное меню">
+          <TopNav>
             <a href="/?new" onClick={open("/?new")}>
               Новая поездка
             </a>
             <UserMenu />
-          </nav>
+          </TopNav>
         </div>
         <div className="wrap hero auth-hero">
           <h1>Пользователь</h1>

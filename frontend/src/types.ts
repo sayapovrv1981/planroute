@@ -111,6 +111,7 @@ export type TripInput = {
   tags: string[];
   end_date: string;
   home_address: string;
+  home_pt?: number[] | null;
   to_station_min: number;
   boarding_min: number | null;
   sight_buffer_min: number;

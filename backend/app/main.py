@@ -275,6 +275,8 @@ async def create_trip(request: Request) -> JSONResponse:
         except ValueError as e:
             print(f"[sutochno] {stay_url!r}: {e}", flush=True)
             return err(422, f"Жильё по ссылке: {e}")
+    if isinstance(body, dict) and str(body.get("home_address") or "").strip() and not body.get("home_pt"):
+        body["home_pt"] = await run_in_threadpool(address.locate, str(body["home_address"]), str(body.get("origin") or ""))
     if isinstance(body, dict):
         body = await run_in_threadpool(wishes_ai.apply, body)  # пожелания словами -> настройки (если есть ключ)
     tickets = [b for b in body.get("bookings") or [] if isinstance(b, dict)] if isinstance(body, dict) else []

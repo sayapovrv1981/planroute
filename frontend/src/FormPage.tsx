@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, dateLabel, plural, rub } from "./api";
 import { AddressInput } from "./AddressInput";
-import { Logo, navigate, UserMenu } from "./nav";
+import { Logo, navigate, TopNav, UserMenu } from "./nav";
 import { AltList, OwnPhoto, Photo, StayImport } from "./Picks";
 import type { Alternative, Meta, TripInput } from "./types";
 
@@ -69,6 +69,7 @@ const DEFAULTS = (() => {
   return {
     origin: "Москва",
     home_address: "",
+    home_pt: null as number[] | null, // координаты адреса из подсказки — для маршрута в Яндекс Картах
     city: "Санкт-Петербург",
     start_date: start,
     end_date: addDays(start, 2),
@@ -123,6 +124,7 @@ function fromTrip(i: TripInput): FormState {
     budget: String(i.budget),
     boarding_min: i.boarding_min ?? "",
     home_address: stripCity(i.home_address || "", i.origin),
+    home_pt: i.home_pt ?? null,
   };
 }
 
@@ -248,9 +250,9 @@ export function FormPage() {
       <header className="top">
         <div className="wrap top-bar">
           <Logo />
-          <nav className="top-nav" aria-label="Основное меню">
+          <TopNav>
             <UserMenu />
-          </nav>
+          </TopNav>
         </div>
         <div className="wrap hero">
           <div className="eyebrow">Планировщик самостоятельных поездок</div>
@@ -274,7 +276,7 @@ export function FormPage() {
                   onChange={(e) => {
                     const v = e.target.value;
                     // другой город — прежний адрес и оценка дороги больше не подходят
-                    setF((st) => ({ ...st, origin: v, home_address: "" }));
+                    setF((st) => ({ ...st, origin: v, home_address: "", home_pt: null }));
                     setEstimated("");
                   }}
                   required
@@ -296,9 +298,10 @@ export function FormPage() {
                   origin={f.origin}
                   city={f.city}
                   transport={f.transport}
-                  onChange={(v) => set("home_address", v)}
+                  onChange={(v) => setF((st) => ({ ...st, home_address: v, home_pt: null }))}
                   onPick={(s) => {
-                    setF((st) => ({ ...st, home_address: s.value, to_station_min: s.to_station_min || st.to_station_min }));
+                    setF((st) => ({ ...st, home_address: s.value, home_pt: s.lat != null && s.lon != null ? [s.lat, s.lon] : null,
+                                    to_station_min: s.to_station_min || st.to_station_min }));
                     setEstimated(s.to_station_min ? `≈ ${dur(s.to_station_min)} (${s.station})` : "");
                   }}
                 />

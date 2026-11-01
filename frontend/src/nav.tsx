@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export function navigate(path: string) {
   window.history.pushState({}, "", path);
@@ -27,6 +27,26 @@ export function Logo() {
   );
 }
 
+/** Меню шапки. На телефоне пункты прячутся под кнопку ☰ и открываются списком; выбор пункта или Esc закрывает. */
+export function TopNav({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
+  return (
+    <nav className={`top-nav ${open ? "open" : ""}`} aria-label="Основное меню">
+      <button type="button" className="burger" aria-expanded={open} aria-label="Меню" onClick={() => setOpen(!open)}>
+        <span aria-hidden="true">{open ? "✕" : "☰"}</span>
+      </button>
+      <div className="top-nav-items" onClick={() => setOpen(false)}>
+        {children}
+      </div>
+    </nav>
+  );
+}
 
 export type User = { id: number; email: string; name: string };
 
