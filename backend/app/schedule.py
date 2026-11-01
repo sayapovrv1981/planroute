@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from . import net, prices
@@ -96,7 +97,11 @@ def partner_any(url: str) -> str:
     return partner(url, program) if program else url
 
 
-def tutu_url(origin: str, dest: str) -> str | None:
+def tutu_url(origin: str, dest: str, date: str = "") -> str | None:
+    """Поезда на Туту.ру; с датой — сразу на этот день (по кодам Экспресс-3, Туту.ру сам переадресует на страницу направления)."""
+    a, b = prices.EXPRESS.get(_key(origin)), prices.EXPRESS.get(_key(dest))
+    if a and b and len(date) == 10:
+        return f"https://www.tutu.ru/poezda/rasp_d.php?nnst1={a}&nnst2={b}&date={date[8:10]}.{date[5:7]}.{date[:4]}"
     a, b = TUTU_SLUGS.get(_key(origin)), TUTU_SLUGS.get(_key(dest))
     return f"https://www.tutu.ru/poezda/{a}/{b}/" if a and b else None
 
@@ -115,7 +120,7 @@ def buy_links(origin: str, dest: str, transport: str, date: str = "", adults: in
     y = travel_url(origin, dest, transport, date)
     if y:
         out.append({"label": "Яндекс Путешествия", "url": y})
-    if transport == "train" and (t := tutu_url(origin, dest)):
+    if transport == "train" and (t := tutu_url(origin, dest, date)):
         out.append({"label": "Туту.ру", "url": partner(t, "tutu")})
     if transport == "plane" and (av := aviasales_url(origin, dest, date, adults)):
         out.append({"label": "Авиасейлс", "url": partner(av, "aviasales")})
@@ -228,18 +233,22 @@ def search(origin: str, dest: str, date: str, transport: str) -> dict:
     hit = _CACHE.get(ck)
     if hit and time.time() - hit[0] < CACHE_SEC:
         return hit[1]
-    payload = _get({"from": a, "to": b, "date": date, "transport_types": kind, "format": "json",
-                    "lang": "ru_RU", "limit": 100})
-    items = parse(payload)
-    if kind == "train":  # электрички — в тот же список: в Подмосковье их сравнивают с «Ласточками» по времени
-        have = {(x["departure"], x["arrival"]) for x in items}  # один рейс Яндекс может отдать и как поезд
-        items = sorted(items + [x for x in suburban(a, b, date) if (x["departure"], x["arrival"]) not in have],
-                       key=lambda x: x["departure"])
-    note = prices.enrich(items, origin, dest, date, kind)
-    res = {"available": True, "items": items, "buy_links": buy_links(origin, dest, transport, date),
-           "price_note": note}
-    if kind == "plane":
-        res["cheaper_dates"] = prices.cheaper_dates(origin, dest, date)
+    # электрички и соседние даты самолётов — одновременно с основным запросом: каждый ответ Яндекса идёт 1–3 с
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        sub = pool.submit(suburban, a, b, date) if kind == "train" else None
+        cheaper = pool.submit(prices.cheaper_dates, origin, dest, date) if kind == "plane" else None
+        payload = _get({"from": a, "to": b, "date": date, "transport_types": kind, "format": "json",
+                        "lang": "ru_RU", "limit": 100})
+        items = parse(payload)
+        if sub:  # электрички — в тот же список: в Подмосковье их сравнивают с «Ласточками» по времени
+            have = {(x["departure"], x["arrival"]) for x in items}  # один рейс Яндекс может отдать и как поезд
+            items = sorted(items + [x for x in sub.result() if (x["departure"], x["arrival"]) not in have],
+                           key=lambda x: x["departure"])
+        note = prices.enrich(items, origin, dest, date, kind)
+        res = {"available": True, "items": items, "buy_links": buy_links(origin, dest, transport, date),
+               "price_note": note}
+        if cheaper:
+            res["cheaper_dates"] = cheaper.result()
     _CACHE[ck] = (time.time(), res)
     return res
 

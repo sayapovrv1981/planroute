@@ -26,6 +26,8 @@ export type Alternative = {
   km?: number | null;
   /** «≈ 1,2 км от предыдущего места, пешком 15 мин» */
   dist?: string | null;
+  /** сайт, бронь, Яндекс Карты — у жилья в форме */
+  links?: { label: string; url: string; ad?: string | null }[];
 };
 
 export type Item = {
@@ -114,6 +116,7 @@ export type TripInput = {
   home_pt?: number[] | null;
   to_station_min: number;
   boarding_min: number | null;
+  arrival_min?: number;
   sight_buffer_min: number;
   step_min: number;
   min_rating: number;

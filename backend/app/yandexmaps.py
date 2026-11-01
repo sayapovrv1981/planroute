@@ -118,6 +118,24 @@ def avg_bill(card: dict) -> int | None:
     return None
 
 
+def offers(card: dict) -> dict:
+    """Бизнес-ланч и акции из свойств карточки: {"lunch_price": 330, "promos": ["скидки", "бонусы"]} — что есть."""
+    out: dict = {}
+    for f in card.get("features") or []:
+        if f.get("id") == "business lunch price" and isinstance(f.get("value"), str):
+            nums = [int(n) for n in re.findall(r"\d+", f["value"].replace(" ", "").replace("\u00a0", ""))]
+            if nums:
+                out["lunch_price"] = nums[0]
+        elif f.get("id") == "promotions" and isinstance(f.get("value"), list):
+            out["promos"] = [v["name"] for v in f["value"] if isinstance(v, dict) and v.get("name")]
+    return out
+
+
+def has_menu(page: str) -> bool:
+    """Вкладка «Меню» страницы организации (…/menu/): блюда с ценами есть, если заведение их заполнило."""
+    return page.count('"price"') >= 5
+
+
 def parse(page: str, oid: str | None = None) -> dict:
     title = (re.search(r"<title>([^<]*)", page) or [None, ""])[1]
     card = _card(_state(page), oid)
@@ -146,6 +164,7 @@ def parse(page: str, oid: str | None = None) -> dict:
         "reviews": int(rating.get("reviewCount") or 0),
         "url": f"https://yandex.ru/maps/org/{card.get('seoname') or 'org'}/{oid}/",
         "photos": [html.unescape(og.group(1))] if og else [],
+        **offers(card),
     }
 
 
@@ -157,4 +176,9 @@ def load(text: str) -> dict:
     page, final = fetch(url)
     if not oid and (oid := org_id(final)):  # короткая ссылка «Поделиться» — узнали id после переадресации
         page, _ = fetch(f"https://yandex.ru/maps/org/{oid}/")
-    return parse(page, oid)
+    place = parse(page, oid)
+    try:  # меню с ценами — ссылкой в программе, если заведение его заполнило
+        place["menu"] = has_menu(fetch(place["url"] + "menu/")[0])
+    except (ValueError, OSError):
+        pass
+    return place

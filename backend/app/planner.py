@@ -173,6 +173,7 @@ class TripInput:
     home_pt: list | None = None          # его координаты [lat, lon] из подсказки адреса
     to_station_min: int = 40             # дорога от дома до вокзала/аэропорта, мин
     boarding_min: int | None = None      # запас на посадку; None — по виду транспорта
+    arrival_min: int = 10                # запас на выход из поезда/самолёта/автобуса по приезде, мин
     sight_buffer_min: int = 0            # запас к каждой достопримечательности, мин
     step_min: int = 5                    # шаг кнопок −/+ в маршруте
     min_rating: float = 4.5              # порог рейтинга мест (заработает с данными Яндекса)
@@ -232,6 +233,7 @@ class TripInput:
             self.boarding_min = max(0, min(240, int(self.boarding_min)))
         else:
             self.boarding_min = None
+        self.arrival_min = max(0, min(120, int(self.arrival_min)))
         self.sight_buffer_min = max(0, min(120, int(self.sight_buffer_min)))
         self.step_min = int(self.step_min) if int(self.step_min) in STEP_CHOICES else 5
         self.min_rating = round(min(5.0, max(0.0, float(self.min_rating))), 1)
@@ -629,7 +631,8 @@ def links_for(ctx: Ctx, p: dict) -> list[dict]:
         out = [{"label": "Бронь на сайте", "url": p["url"]}] if p.get("url", "").startswith("http") else []
         return out + [{"label": "Яндекс Карты", "url": f"https://yandex.ru/maps/?pt={p['lon']},{p['lat']}&z=17&l=map"}]
     if p.get("source") == "yandex":  # своё кафе по ссылке с Яндекс Карт
-        return [{"label": "Яндекс Карты", "url": p["url"]}]
+        menu = [{"label": "Меню и цены — Яндекс Карты", "url": p["url"] + "menu/"}] if p.get("menu") else []
+        return [{"label": "Яндекс Карты", "url": p["url"]}, *menu]
     if p.get("source") == "tripster":  # ссылка уже партнёрская по правилам Трипстера, с его маркировкой
         return [{"label": "Забронировать — Трипстер", "url": p["url"], "ad": p.get("ad"), "direct": True}]
     if p.get("source") == "sutochno":
@@ -643,8 +646,20 @@ def links_for(ctx: Ctx, p: dict) -> list[dict]:
         if p.get("booking_url"):
             out.append({"label": "Забронировать — Островок", "url": p["booking_url"]})
         out.append({"label": "Цены на даты — Яндекс Путешествия", "url": hotels_link(ctx)})
-    out.append({"label": "Яндекс Карты", "url": catalog.maps_link(p["name"], ctx.city)})
+    if p.get("menu") and p.get("ymaps_id"):
+        out.append({"label": "Меню и цены — Яндекс Карты", "url": f"https://yandex.ru/maps/org/{p['ymaps_id']}/menu/"})
+    out.append({"label": "Яндекс Карты", "url": f"https://yandex.ru/maps/org/{p['ymaps_id']}/" if p.get("ymaps_id")
+                else catalog.maps_link(p["name"], ctx.city)})
     return out
+
+
+ARRIVAL_TITLE = {"train": "Выход из поезда", "plane": "Выход из аэропорта, багаж", "bus": "Выход из автобуса"}
+
+
+def arrival(it: dict) -> dict:
+    """Запас по приезде: его длительность хранится в вводных (arrival_min) и переживает перестройку программы."""
+    it["arrival"] = True
+    return it
 
 
 def make_item(kind: str, title: str, duration: int, *, place: dict | None = None, note: str = "",
@@ -719,6 +734,14 @@ def attraction_item(ctx: Ctx, p: dict) -> dict:
 MEAL_TITLE = {"breakfast": "Завтрак", "lunch": "Обед", "dinner": "Ужин", "snack": "Перекус"}
 
 
+def promo_text(p: dict) -> str:
+    """«акции: скидки, бонусы — подробности на Яндекс Картах»; сами условия акций Карты в карточке не отдают."""
+    kinds = [k for k in p.get("promos") or [] if k != "акции"][:3]
+    if not p.get("promos"):
+        return ""
+    return (f"акции: {', '.join(kinds)}" if kinds else "есть акции") + " — подробности на Яндекс Картах"
+
+
 def food_item(ctx: Ctx, p: dict, meal: str, light: bool = False) -> dict:
     title = MEAL_TITLE[meal]
     if light and meal == "dinner":
@@ -730,8 +753,10 @@ def food_item(ctx: Ctx, p: dict, meal: str, light: bool = False) -> dict:
         if ctx.ti.pace == "relaxed" and meal == "lunch":
             dur = 90
     # хвост описания у всех мест еды одинаковый: чек, своё описание, рейтинг Яндекса, часы работы
-    parts = [f"Средний чек ≈ {rub(p['avg_check'])} на человека", p.get("note", ""),
-             rating_text(p), hours_text(p)]
+    parts = [f"Средний чек ≈ {rub(p['avg_check'])} на человека",
+             f"бизнес-ланч ≈ {rub(p['lunch_price'])}, обычно по будням" if meal == "lunch" and p.get("lunch_price") else "",
+             p.get("note", ""), rating_text(p), hours_text(p),
+             promo_text(p)]
     if p.get("checked") and "уточни" not in (p.get("note") or ""):
         parts.append("часы и цены на октябрь 2026, уточните перед визитом")
     it = make_item("food", f"{title} · {p['name']}", dur, place=p, note=" · ".join(n for n in parts if n),
@@ -1107,8 +1132,8 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
     # ---- утро / приезд
     if d.kind in ("first", "single", "night"):
         if d.kind != "night" and ctx.night_out:  # приехали ночным поездом: день начинается с вокзала
-            add(make_item("travel", f"Прибытие: {(arrive_pt or {}).get('name', ctx.city)}", 15, fixed=ctx.arrive_at,
-                          point=arrive_pt, note="Ночь в дороге позади"))
+            add(arrival(make_item("travel", f"Прибытие: {(arrive_pt or {}).get('name', ctx.city)}", max(ti.arrival_min, 5),
+                                  fixed=ctx.arrive_at, point=arrive_pt, note="Ночь в дороге позади")))
         elif ctx.transport == "car":
             add(make_item("travel", f"Выезд из {ti.origin}", ctx.out_minutes, fixed=dep, shift=ctx.shift,
                           note="Ориентировочно, с остановками" if not ti.arrive_time else f"Выезд {ti.start_time}, прибытие {ti.arrive_time}",
@@ -1139,6 +1164,9 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
                           estimate=int(ctx.out_price * ctx.people_price), links=link + rasp_link(ctx, d.date, True),
                           note=leg_note(ctx.transport, ti.start_time, ti.arrive_time, ti.out_number, ctx.out_minutes)
                           + tz_note(ctx, True) + price_note(ti.out_price)))
+            if ti.arrival_min and not ctx.night_out:
+                add(arrival(make_item("travel", ARRIVAL_TITLE.get(ctx.transport, "Выход с вокзала"), ti.arrival_min,
+                                      point=arrive_pt, note="Запас времени на выход и вещи — меняется кнопками − и +")))
         if d.kind == "night":
             return items  # программа в городе — со следующего утра
         if d.kind == "single":
@@ -1618,6 +1646,8 @@ def set_duration(trip: dict, item_id: str, minutes: int) -> dict:
             if not (prev and prev.get("fixed_start") is not None and prev["fixed_start"] + prev["duration"] == anchor):
                 break
             i -= 1
+    if it.get("arrival"):
+        trip["input"]["arrival_min"] = new
     if it["kind"] == "travel" and it["title"] == "Выход из дома":
         trip["input"]["to_station_min"] = new
         it["note"] = re.sub(r"≈ (?:\d+ ч ?)?(?:\d+ мин)?", f"≈ {fmt_dur(new)}", it["note"])

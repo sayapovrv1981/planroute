@@ -51,8 +51,10 @@ class YandexMapsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             yandexmaps.find_url("https://2gis.ru/kazan/firm/1")
         with mock.patch.object(yandexmaps, "fetch", return_value=(page(CARD), "https://yandex.ru/maps/org/x/1191221375/")) as f:
-            yandexmaps.load("https://yandex.ru/maps/org/tatarskaya_usadba/1191221375/?ll=1,2")
-        f.assert_called_once_with("https://yandex.ru/maps/org/1191221375/")
+            place = yandexmaps.load("https://yandex.ru/maps/org/tatarskaya_usadba/1191221375/?ll=1,2")
+        self.assertEqual([c[0][0] for c in f.call_args_list], ["https://yandex.ru/maps/org/1191221375/",  # карточка и вкладка меню
+                                                                place["url"] + "menu/"])
+        self.assertFalse(place["menu"])  # в странице-образце блюд с ценами нет
 
     def test_into_program(self):
         trip = planner.plan_trip({"origin": "Москва", "city": "Казань", "start_date": "2026-11-03", "start_time": "07:00",

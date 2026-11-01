@@ -139,7 +139,7 @@ with sync_playwright() as p:
     expect(page.get_by_label("Отправление поезда").first).to_have_value("07:00")
     expect(page.get_by_label("Прибытие").first).to_have_value("10:55")
     expect(page.get_by_text("билет от 4 100 ₽ за взрослого — учтём в бюджете")).to_be_visible()
-    expect(page.get_by_role("link", name="Яндекс Путешествия ↗")).to_have_attribute(
+    expect(page.get_by_role("link", name="Яндекс Путешествия ↗", exact=True)).to_have_attribute(
         "href", "https://travel.yandex.ru/trains/moscow--saint-petersburg/?when=2026-10-27")
     expect(page.get_by_role("link", name="Туту.ру ↗")).to_have_attribute("href", "https://www.tutu.ru/poezda/Moskva/Sankt-Peterburg/")
     page.get_by_label("№ поезда").first.fill("752А")

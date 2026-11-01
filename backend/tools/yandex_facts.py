@@ -6,7 +6,8 @@
    координатами места (id, название, адрес, рейтинг, часы). Глазами выбираем нужный id и пишем его
    в каталог полем `ymaps_id`.
 2. `.venv/bin/python -I tools/yandex_facts.py data/spb_places.json --write` — по `ymaps_id` берёт
-   страницу организации и обновляет в каталоге `rating`, `reviews` и `hours`. Места без `ymaps_id`
+   страницу организации и обновляет в каталоге `rating`, `reviews` и `hours`, а также цену бизнес-ланча
+   `lunch_price`, акции `promos` и `menu: true`, если на Картах есть меню с ценами. Места без `ymaps_id`
    и заглушки (`placeholder`) пропускает.
 """
 from __future__ import annotations
@@ -46,7 +47,7 @@ def facts(card: dict, p: dict) -> dict:
             "km": round(haversine_km(float(lat), float(lon), p["lat"], p["lon"]), 2),
             "rating": round(float(r["ratingValue"]), 1) if r.get("ratingValue") else None,
             "reviews": int(r.get("reviewCount") or 0), "hours": yandexmaps.hours(card.get("workingTime")),
-            "closed": card.get("status") in ("permanent-closed", "temporary-closed")}
+            "closed": card.get("status") in ("permanent-closed", "temporary-closed"), **yandexmaps.offers(card)}
 
 
 def candidates(p: dict, city: str) -> list[dict]:
@@ -74,7 +75,15 @@ def by_id(p: dict) -> dict | None:
             card = yandexmaps._card(yandexmaps._state(page), str(p["ymaps_id"]))
         except (ValueError, http.client.HTTPException):  # ошибка Карт или оборванный ответ
             continue
-        return facts(card, p) if card else None
+        if not card:
+            return None
+        out = facts(card, p)
+        time.sleep(pause)
+        try:
+            out["menu"] = yandexmaps.has_menu(yandexmaps.fetch(f"https://yandex.ru/maps/org/{p['ymaps_id']}/menu/")[0])
+        except (ValueError, OSError, http.client.HTTPException):
+            pass  # меню не узнали — оставим, как было
+        return out
     return None
 
 
@@ -107,6 +116,17 @@ def main(path: str, write: bool) -> None:
             p["rating"], p["reviews"] = found["rating"], found["reviews"]
         if found["hours"]:
             p["hours"] = found["hours"]
+        for key in ("lunch_price", "promos"):  # нет на Картах — убираем и из каталога
+            if found.get(key):
+                p[key] = found[key]
+            else:
+                p.pop(key, None)
+        if "menu" in found:
+            if found["menu"]:
+                p["menu"] = True
+            else:
+                p.pop("menu", None)
+        print(f"   бизнес-ланч {found.get('lunch_price')} · акции {found.get('promos')} · меню {found.get('menu')}")
     if write:
         # каталоги храним с отступом в 1 пробел и без перевода строки в конце (см. CLAUDE.md)
         file.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")

@@ -66,9 +66,8 @@ class ScheduleTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"YANDEX_RASP_API_KEY": "k"}):
             with mock.patch.object(schedule, "_get", return_value=SAMPLE) as get:
                 res = schedule.search("Москва", "Санкт-Петербург", "2026-10-27", "train")
-        params = get.call_args_list[0][0][0]
-        self.assertEqual((params["from"], params["to"], params["transport_types"]), ("c213", "c2", "train"))
-        self.assertEqual(get.call_args_list[1][0][0]["transport_types"], "suburban")
+        calls = sorted((c[0][0]["from"], c[0][0]["to"], c[0][0]["transport_types"]) for c in get.call_args_list)
+        self.assertEqual(calls, [("c213", "c2", "suburban"), ("c213", "c2", "train")])  # электрички — параллельно
         self.assertTrue(res["available"])
         self.assertEqual(len(res["items"]), 3)  # те же рейсы электричками не повторяются
 
@@ -100,13 +99,15 @@ class ScheduleTest(unittest.TestCase):
             self.assertEqual([x["label"] for x in plane], ["Яндекс Путешествия", "Авиасейлс"])
             self.assertEqual(plane[1]["url"], "https://www.aviasales.ru/search/MOW2710LED2")
             train = schedule.buy_links("Санкт-Петербург", "Москва", "train", "2026-10-29")
-            self.assertEqual(train[1]["url"], "https://www.tutu.ru/poezda/Sankt-Peterburg/Moskva/")
+            self.assertEqual(train[1]["url"], "https://www.tutu.ru/poezda/rasp_d.php?nnst1=2004000&nnst2=2000000&date=29.10.2026")
+            self.assertEqual(schedule.buy_links("Москва", "Сочи", "train", "2026-11-10")[1]["url"],
+                             "https://www.tutu.ru/poezda/rasp_d.php?nnst1=2000000&nnst2=2064130&date=10.11.2026")
         # с маркером Travelpayouts ссылка Авиасейлс становится партнёрской, Туту.ру — только когда задан номер программы
         with mock.patch.dict(os.environ, {"TP_MARKER": "12345", "TP_PROGRAM_TUTU": "", "TP_PROGRAM_AVIASALES": ""}):
             plane = schedule.buy_links("Москва", "Санкт-Петербург", "plane", "2026-10-27")
             self.assertTrue(plane[1]["url"].startswith("https://tp.media/r?marker=12345&p=4114&u=https%3A%2F%2Fwww.aviasales.ru"))
             train = schedule.buy_links("Москва", "Санкт-Петербург", "train", "2026-10-27")
-            self.assertEqual(train[1]["url"], "https://www.tutu.ru/poezda/Moskva/Sankt-Peterburg/")
+            self.assertEqual(train[1]["url"], "https://www.tutu.ru/poezda/rasp_d.php?nnst1=2000000&nnst2=2004000&date=27.10.2026")
 
     def test_unknown_city(self):
         with mock.patch.dict(os.environ, {"YANDEX_RASP_API_KEY": "k"}):

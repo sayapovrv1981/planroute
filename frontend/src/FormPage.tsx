@@ -617,6 +617,7 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<Alternative | null>(null);
   const [error, setError] = useState("");
+  const [prefill, setPrefill] = useState<ManualStay | null>(null); // отель по ссылке Островка — в форму своей брони
   const kidsKey = f.kids_ages.join(",");
   const budget = Number(String(f.budget).replace(/\s/g, "")) || 0;
   useEffect(() => {
@@ -683,6 +684,12 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
         ]
           .filter(Boolean)
           .join(" · "),
+        links: [
+          ...(/^https?:\/\//.test(m.url) ? [{ label: "Бронь на сайте", url: m.url }] : []),
+          m.lat != null && m.lon != null
+            ? { label: "Яндекс Карты", url: `https://yandex.ru/maps/?pt=${m.lon},${m.lat}&z=17&l=map` }
+            : { label: "Яндекс Карты", url: `https://yandex.ru/maps/?text=${encodeURIComponent(`${m.name}, ${m.address || f.city}`)}` },
+        ],
       }
     : f.stay_url
       ? preview ?? { id: "url", name: "Квартира по ссылке", meta: f.stay_url }
@@ -721,6 +728,15 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
             <small className="stay-tag">{f.stay_url || m ? "Своя бронь" : auto ? "Подберём сами по бюджету" : "Ваш выбор"}</small>
             <b>{picked.name}</b>
             <span>{picked.meta}</span>
+            {!!picked.links?.length && (
+              <div className="links">
+                {picked.links.map((l) => (
+                  <a key={l.url} href={l.url} target="_blank" rel="noreferrer" title={l.ad || undefined}>
+                    {l.label} ↗
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
           <button type="button" className={`btn ${open ? "on" : ""}`} aria-expanded={open} onClick={() => setOpen(!open)}>
             ⇄ Заменить
@@ -743,6 +759,10 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
                 setError(j.error || "Не удалось открыть объявление — проверьте ссылку");
                 return false;
               }
+              if (j.manual) {  // Островок: заполняем свою бронь, цену человек впишет сам
+                setPrefill(j.manual as ManualStay);
+                return true;
+              }
               setPreview(j as Alternative);
               setF_url(url);
               setOpen(false);
@@ -751,9 +771,12 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
           />
           {error && <p className="hint warn">{error}</p>}
           <ManualStayForm
+            key={prefill?.url || "manual"}
             city={f.city}
-            initial={m}
+            initial={prefill ?? m}
+            note={prefill ? "Заполнили по странице Островка — впишите цену за ночь из своей брони и проверьте время заезда." : ""}
             onSave={(v) => {
+              setPrefill(null);
               set("stay_id", "");
               set("stay_url", "");
               setPreview(null);
@@ -793,7 +816,7 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
 }
 
 /** Бронь на другом сайте (Авито, Trip.com, Островок, сайт отеля): данные с сайта не читаем — вводит человек. */
-function ManualStayForm({ city, initial, onSave }: { city: string; initial: ManualStay | null; onSave: (m: ManualStay) => void }) {
+function ManualStayForm({ city, initial, note, onSave }: { city: string; initial: ManualStay | null; note?: string; onSave: (m: ManualStay) => void }) {
   const blank: ManualStay = { name: "", address: "", lat: null, lon: null, price_night: "", check_in: "", check_out: "", kind: "apartment", url: "" };
   const [show, setShow] = useState(!!initial);
   const [m, setM] = useState<ManualStay>(initial ?? blank);
@@ -808,6 +831,7 @@ function ManualStayForm({ city, initial, onSave }: { city: string; initial: Manu
   return (
     <fieldset className="leg manual-stay">
       <legend>Своя бронь на другом сайте</legend>
+      {note && <p className="hint ok">{note}</p>}
       <div className="chips" role="group" aria-label="Вид своего жилья">
         {(["apartment", "hotel"] as const).map((k) => (
           <button type="button" key={k} className={`seg ${m.kind === k ? "on" : ""}`} aria-pressed={m.kind === k} onClick={() => put("kind", k)}>

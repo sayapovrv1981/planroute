@@ -47,7 +47,7 @@ class PlannerTest(unittest.TestCase):
         self.assertNotIn("билет от", back["note"])
         buy = [lk["url"] for lk in out["links"] if lk["label"].startswith("Купить билет")]
         self.assertEqual(buy, ["https://travel.yandex.ru/trains/moscow--saint-petersburg/?when=2026-10-27",
-                               "https://www.tutu.ru/poezda/Moskva/Sankt-Peterburg/"])
+                               "https://www.tutu.ru/poezda/rasp_d.php?nnst1=2000000&nnst2=2004000&date=27.10.2026"])
         back_buy = [lk["url"] for lk in back["links"] if lk["label"].startswith("Купить билет")]
         self.assertEqual(back_buy[0], "https://travel.yandex.ru/trains/saint-petersburg--moscow/?when=2026-10-29")
 
@@ -506,8 +506,8 @@ class KazanTest(unittest.TestCase):
         # поезд 13:15 -> 01:00: в первый день после поезда — только заселение, без ужина в 03:45
         trip = planner.plan_trip(dict(KAZAN, transport="train", start_time="13:15", arrive_time="01:00", days=3))
         after = trip["days"][0]["items"][3:]
-        self.assertEqual([i["kind"] for i in after], ["hotel"])
-        self.assertEqual(after[0]["warnings"], [])
+        self.assertEqual([i["title"] if i["kind"] == "travel" else i["kind"] for i in after], ["Выход из поезда", "hotel"])
+        self.assertEqual(after[1]["warnings"], [])
         self.assertEqual(trip["days"][1]["items"][0]["title"], "Подъём")
 
     def test_late_evening_arrival_no_rest_before_dinner(self):
@@ -629,6 +629,38 @@ class SochiSeasonTest(unittest.TestCase):
         ids = self.ids("2027-01-20")
         self.assertIn("ski", ids)
         self.assertFalse(ids & {"beach", "boat", "polyana"})  # и в вечерней прогулке пляжа нет
+
+
+class ArrivalTest(unittest.TestCase):
+    def test_arrival_buffer_after_train(self):
+        trip = planner.plan_trip(dict(BASE, transport="train"))
+        first = trip["days"][0]["items"]
+        i = next(n for n, it in enumerate(first) if it.get("arrival"))
+        self.assertEqual(first[i]["title"], "Выход из поезда")
+        self.assertEqual(first[i]["duration"], 10)
+        self.assertEqual(first[i]["start"], first[i - 1]["start"] + first[i - 1]["duration"])  # сразу после поезда
+        trip = planner.set_duration(trip, first[i]["id"], 20)
+        self.assertEqual(trip["input"]["arrival_min"], 20)  # переживёт перестройку программы
+        again = planner.plan_trip(trip["input"])
+        self.assertEqual(next(it for it in again["days"][0]["items"] if it.get("arrival"))["duration"], 20)
+
+    def test_no_arrival_buffer_by_car(self):
+        trip = planner.plan_trip(dict(BASE, transport="car"))
+        self.assertFalse(any(it.get("arrival") for it in trip["days"][0]["items"]))
+
+
+
+class FoodOffersTest(unittest.TestCase):
+    def test_lunch_price_promos_menu(self):
+        ctx = planner.trip_ctx(planner.plan_trip(dict(BASE)))
+        p = dict(next(x for x in ctx.places("food") if not x.get("placeholder")),
+                 lunch_price=350, promos=["скидки", "бонусы"], menu=True, ymaps_id=123)
+        lunch = planner.food_item(ctx, p, "lunch")
+        self.assertIn("бизнес-ланч ≈ 350 ₽, обычно по будням", lunch["note"])
+        self.assertIn("акции: скидки, бонусы", lunch["note"])
+        self.assertIn({"label": "Меню и цены — Яндекс Карты", "url": "https://yandex.ru/maps/org/123/menu/"}, lunch["links"])
+        self.assertEqual(lunch["links"][-1]["url"], "https://yandex.ru/maps/org/123/")
+        self.assertNotIn("бизнес-ланч", planner.food_item(ctx, p, "dinner")["note"])  # вечером ланча нет
 
 
 if __name__ == "__main__":

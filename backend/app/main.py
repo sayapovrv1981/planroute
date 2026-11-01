@@ -22,8 +22,8 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from . import config  # noqa: F401 — первым: читает backend/.env до остальных модулей
-from . import (address, auth, bookings, catalog, db, limits, planner, schedule, store, sutochno, trip_ai, tripster,
-               wishes_ai, yandexmaps)
+from . import (address, auth, bookings, catalog, db, limits, ostrovok, planner, schedule, store, sutochno, trip_ai,
+               tripster, wishes_ai, yandexmaps)
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -70,8 +70,7 @@ def present(tid: str, trip: dict) -> dict:
                               else "Экскурсии с гидом — Трипстер", "url": tripster_city})
             if place and place.get("source") == "tripster":  # бронь экскурсии — сразу на дату из программы
                 links = [dict(l, url=tripster.booking_link(l["url"], d["date"])) if l.get("direct") else l for l in links]
-            it["links"] = [dict(l, url=u, ad=l.get("ad") or schedule.ad_label(u))
-                           for l in links for u in [l["url"] if l.get("direct") else schedule.partner_any(l["url"])]]
+            it["links"] = shown_links(links)
             doc = it.get("doc") or {}
             if (doc.get("sum") and not doc.get("onsite")) or (place and place.get("booked")):
                 # оплачено или по своему билету — купить больше не предлагаем
@@ -225,8 +224,15 @@ async def stays(request: Request) -> JSONResponse:
             f", {r['units']} {planner.plural(r['units'], *unit)}" if r["units"] > 1 else "")
         meta = stay_meta(p)
         r["meta"] = " · ".join(m for m in [meta[0], meta[1], total, *meta[2:]] if m)
+        r["links"] = shown_links(planner.links_for(ctx, p))  # сайт отеля, бронь, Яндекс Карты — как в программе
     opts["search"] = stay_search(ctx)
     return JSONResponse(opts)
+
+
+def shown_links(links: list[dict]) -> list[dict]:
+    """Ссылки для показа: партнёрские, где есть программа, с пометкой «Реклама»."""
+    return [dict(l, url=u, ad=l.get("ad") or schedule.ad_label(u))
+            for l in links for u in [l["url"] if l.get("direct") else schedule.partner_any(l["url"])]]
 
 
 def stay_search(ctx: planner.Ctx) -> list[dict]:
@@ -241,10 +247,19 @@ def stay_search(ctx: planner.Ctx) -> list[dict]:
 
 
 async def stay_preview(request: Request) -> JSONResponse:
-    """Объявление Суточно.ру по ссылке — показать в форме до построения поездки."""
+    """Объявление Суточно.ру по ссылке — показать в форме до построения поездки.
+    Отель с Островка — {"manual": поля «своей брони»}: форма заполняется, цену человек вписывает из брони."""
     try:
         body = await request.json()
-        place = await run_in_threadpool(sutochno.load, str(body.get("url") or ""))
+        text = str(body.get("url") or "")
+        if ostrovok.find_url(text):
+            manual = await run_in_threadpool(ostrovok.load, text)
+            fn = catalog.normalize_city(str(body.get("city") or ""))
+            data = catalog.load(fn) if fn else None
+            if data and catalog.haversine_km(manual["lat"], manual["lon"], *data["center"][:2]) > 80:
+                return err(422, f"Этот отель не в городе {data['city']} — проверьте ссылку")
+            return JSONResponse({"manual": manual})
+        place = await run_in_threadpool(sutochno.load, text)
     except ValueError as e:
         return err(422, str(e))
     except Exception:
@@ -253,8 +268,12 @@ async def stay_preview(request: Request) -> JSONResponse:
     city = catalog.load(fn)["city"] if fn else None
     if city and place.get("city") and place["city"] != city:
         return err(422, f"Это объявление в городе {place['city']}, а поездка — в {city}")
+    links = [{"label": "Объявление — Суточно.ру", "url": place["url"]}] if place.get("url") else []
+    if place.get("lat") is not None:
+        links.append({"label": "Яндекс Карты", "url": f"https://yandex.ru/maps/?pt={place['lon']},{place['lat']}&z=17&l=map"})
     return JSONResponse({"id": place["id"], "name": place["name"], "meta": " · ".join(m for m in stay_meta(place) if m),
-                         "photo": sutochno.thumb(place["photos"][0]) if place.get("photos") else None})
+                         "photo": sutochno.thumb(place["photos"][0]) if place.get("photos") else None,
+                         "links": shown_links(links)})
 
 
 def checkin_item(trip: dict) -> dict | None:
