@@ -1,113 +1,100 @@
-# Своим ходом (tripplan) — состояние на 2026-10-29 (вечер)
+# Своим ходом (tripplan) — состояние на 2026-11-02
 
-Передача контекста в новый чат. Устройство проекта и API подробно — в `README.md`, правила работы —
-в `CLAUDE.md`, план этапов — в памяти прежнего сервера (`roadmap.md`, в репозитории его нет). Здесь только итог
-последних сессий.
+Передача контекста в новый чат. Устройство проекта и API подробно — в `README.md`, правила работы — в `CLAUDE.md`,
+замечания пользователя и ответы на них — в `tasks.md`. Здесь — итог последних сессий и план.
 
 ## 1. Архитектура и структура
 
 Монолит: Python-бэкенд на Starlette отдаёт и API, и собранный фронтенд. Данные — PostgreSQL (аккаунты, поездки,
 каталог мест), файлы документов — на диске или в S3. Главная копия каталога — JSON в git, в базу его загружает
-`manage.py import-catalog`.
+`manage.py import-catalog` (на сервере — при старте контейнера).
 
 ```
 backend/
-  app/planner.py      ядро: каркас дня, отбор мест, пересчёт времени, бюджет, пункты программы
-  app/main.py         HTTP API (Starlette Route), раздача фронтенда, RequireLogin, /api/health с проверкой базы
-  app/config.py       НОВОЕ — настройки сервера из env (+ чтение backend/.env): DATABASE_URL, STORAGE, S3_*, лимиты
-  app/db.py           НОВОЕ — SQLAlchemy Core + psycopg 3, таблицы users, sessions, resets, trips, cities, places
-  app/storage.py      НОВОЕ — LocalStorage (var/uploads) и S3Storage (boto3), ключ «папка/имя»
-  app/limits.py       НОВОЕ — BodyLimit (413) и RateLimit (429, счётчики в памяти процесса)
-  app/catalog.py      каталог из таблиц cities/places (lru_cache), import_json() из data/*_places.json
-  app/store.py        поездки в PostgreSQL, файлы через storage
-  app/auth.py         почта+пароль (scrypt), сессия в cookie sh_session, сброс пароля
-  manage.py           НОВОЕ — devdb start|stop|status, migrate, import-catalog, setup, sqlite-to-pg, files-to-s3
-  migrations/         НОВОЕ — Alembic, 0001_initial
-  tools/devpg.py      НОВОЕ — PostgreSQL 16 из колеса pgserver (PyPI) без установки в систему
-  tools/yandex_facts.py  рейтинг и часы заведений из Яндекс Карт
-  data/*_places.json  черновые каталоги (indent=1, без \n в конце!)
-  tests/              129 юнит-тестов + e2e_smoke.py; tests/testdb.py — временный PostgreSQL на прогон
-frontend/src/         без изменений в этой сессии (см. README)
-Dockerfile, docker-compose.yml, .dockerignore   НОВОЕ — образ приложения, compose: app + postgres (+ minio)
+  app/planner.py      ядро: каркас дня, отбор мест, пересчёт времени, бюджет, пункты программы, ROUTES, why_place
+  app/main.py         HTTP API, раздача фронтенда, RequireLogin, present() — поездка для клиента
+  app/trip_ai.py      «Поменять программу словами»: модель предлагает правки, человек выбирает
+  app/wishes_ai.py    YandexGPT: разбор пожеланий, общий ask()
+  app/schedule.py     Яндекс Расписания (поезда + электрички, самолёты, автобусы), ссылки покупки, партнёрки
+  app/prices.py       цены поездов Туту.ру (коды «Экспресс»), самолётов Авиасейлс, дешевле в соседние дни
+  app/yandexmaps.py   карточка кафе с Яндекс Карт: часы, рейтинг, бизнес-ланч, акции, меню
+  app/sutochno.py     квартира с Суточно.ру по ссылке;  app/ostrovok.py — отель с Островка по ссылке
+  app/tripster.py     экскурсии Трипстера;  app/address.py — подсказки адресов (DaData/Photon), locate()
+  app/bookings.py     распознавание билетов и броней;  app/mailer.py — письма (SMTP)
+  app/config.py, db.py, storage.py, limits.py, catalog.py, store.py, auth.py — инфраструктура
+  data/*_places.json  каталоги 8 городов (indent=1, без \n в конце!)
+  tools/yandex_facts.py  рейтинг, часы, бизнес-ланч, акции и меню кафе с Яндекс Карт (--write)
+  tests/              159 юнит-тестов + e2e_smoke.py; tests/testdb.py — временный PostgreSQL на прогон
+frontend/src/         FormPage (вводные), TripPage (программа), AskEdit, Picks, AddressInput, nav (TopNav ☰)
+scripts/backup.sh, planroute-backup.{service,timer}   ежедневные резервные копии на сервере
+Dockerfile, docker-compose.yml   образ приложения, compose: app + postgres (+ minio)
 ```
 
-Роутинг фронтенда — по `window.location.pathname`: `/` форма, `/trip/<id>`, `/trips`, `/account`, `/login`, `/reset`.
-Всё под `/api/` требует входа (`RequireLogin`, исключения в `PUBLIC_API`), поездки — только владельцу.
+Города: Санкт-Петербург, Казань, Нижний Новгород, Калининград, Выборг, Краснодар, Сочи, Коломна.
 
 ## 2. Где идёт работа
 
-С этой сессии — на Mac пользователя: `/Users/ruslan/planroute`, Python 3.15, Node 26, нет Docker, Homebrew и
-системного PostgreSQL. Окружение: `backend/.venv`, база разработки `manage.py devdb start` (порт 54329,
-`backend/var/postgres`), сервер — `bash scripts/run.sh` или F5 в VS Code (задача «Перед запуском» поднимает базу).
-Локальные аккаунт и 2 поездки пользователя перенесены из SQLite в PostgreSQL (`manage.py sqlite-to-pg`).
+- Mac пользователя: `/Users/ruslan/planroute`, `backend/.venv`, база разработки `manage.py devdb start` (порт 54329),
+  сервер — `bash scripts/run.sh` или F5 в VS Code (http://127.0.0.1:8000).
+- Второй Mac (с 2026-11-02): `/Users/ruslan_sayapov/planroute`, macOS 13.4.1 Intel, без Homebrew и Docker;
+  Python 3.12 и Node 22 — установщики с python.org и nodejs.org. Python 3.12 не в PATH — запуск:
+  `PATH=/Library/Frameworks/Python.framework/Versions/3.12/bin:$PATH bash scripts/run.sh`. Там не установился `moto`
+  (не проходит только `test_infra`, он нужен для S3). Перед работой — `git pull`: правки идут с обоих Mac.
+- Рабочий сервер https://planroute.ru — облачный сервер reg.ru `5.63.152.234`, Docker Compose в `/opt/planroute`,
+  nginx + Let's Encrypt, ufw, fail2ban. Выкладка — `git archive … | ssh …` (README). Выкладываем только по просьбе.
+- GitHub: `git@github.com:sayapovrv1981/planroute.git`, ветка `main`.
 
+## 3. Что сделано в сессиях 2026-10-30 — 2026-11-02
 
-## 3. Что сделано в этой сессии
+**Выкладка и эксплуатация**
+- planroute.ru работает: домен на A-записях хостинга «Хост-0» (почтовые записи MX, `mail`, SPF не трогать).
+- Резервные копии: `scripts/backup.sh` каждый день в 04:30 — `pg_dump` в `/opt/backups` (14 дней) и в объектное
+  хранилище reg.ru, бакет `planrote-backup` (30 дней). Ключи — `/root/backup-s3.env` на сервере и
+  `/Users/ruslan/planroute-backup-s3.env` на Mac, в git их нет. Восстановление из обоих мест проверено (1 аккаунт, 9 поездок).
+- Связь Mac ↔ сервер периодически пропадает (SSH и сайт): соединение устанавливается, а данные от сервера не доходят.
+  Сервер, баны и нагрузка ни при чём; бывает и с другого IP (104.167.199.111). На сервере идёт запись трафика
+  с домашнего IP 188.232.64.245 (`tcpdump` в `/tmp/home.pcap*`, до 2026-11-04). Команды по SSH — с повторами.
 
-Коммит `ce0eaca` — данные заведений (пункт 1 прошлого плана):
-- `f_singer`: «ЗингерЪ» на Картах закрыт навсегда, кафе в Доме Зингера теперь «Рене» (Невский, 28) — переименовано.
-- `f_vasilyevsky2`: координаты были в 600 м от адреса (поэтому поиск в радиусе 400 м его не находил) — исправлены.
-- Казань: `f_tubetey`, `f_usadba` — ymaps_id, точные координаты, рейтинг и часы.
-- Найдены ещё два закрытых навсегда, хотя рейтинг у них был: `f_stolle_kon` (Конюшенный пер., 1/6) и `f_petrograd`
-  (Большой П. С., 64) — заменены на ближайшие открытые «Штолле» (Невский, 11) и «Теремок» (Льва Толстого, 1-3).
-- `yandex_facts.py`: печатает «! … закрыто» вместо обновления, повторяет запрос при ошибке Карт (лимит частоты).
-
-Коммит этапа C.0 (кроме VPS и домена):
-- PostgreSQL вместо SQLite. Тип колонок данных — `json`, не `jsonb`: jsonb переставляет ключи объектов, а порядок
-  ключей в поездке и каталоге мог влиять на вывод. Время — `timestamptz`.
-- Регистрация берёт `lock table users`: иначе две одновременные могли обе стать «первым пользователем».
-  `reset_password` помечает ссылку использованной условием `used is null` — одна ссылка не сработает дважды.
-- Каталог в БД: ключ города — прежнее имя файла (`spb_places.json`), порядок мест — колонка `pos`.
-  Каталог из базы сверен с JSON побайтно.
-- Файлы: `store.read_file` вместо `file_path`, отдача через `Response` с тем же Content-Disposition, что у FileResponse.
-- Лимиты: файл 15 МБ, запрос с файлами 60 МБ, без файлов 512 КБ; частота — правила `limits.RULES`.
-- Docker: образ на python:3.12-slim, при старте `manage.py setup`, uvicorn одним процессом с `--proxy-headers`.
-  **Docker-файлы не проверены сборкой** — на Mac нет Docker. YAML compose синтаксически читается.
-
-Проверено: 129 юнит-тестов (9 новых в `test_infra.py`: хранилище на диске и в S3 через moto, лимиты, импорт каталога,
-перенос из SQLite) и `e2e_smoke.py` проходят на PostgreSQL.
+**Новое в приложении**
+- Сочи (сезонность `months`), Коломна (41 место с Яндекс Карт, электрички с Казанского вокзала, выезд в Зарайск).
+- «Почему здесь» у мест, «Поменять программу словами» (YandexGPT).
+- Цены поездов Туту.ру для всех городов, Туту.ру — сразу на дату поездки; самолёты — «Дешевле в соседние дни»;
+  электрички в списке «Поезд»; запросы расписания параллельно (≈2,5 с вместо 5).
+- «Выход из поезда» (самолёта, автобуса) 10 мин с −/+ (`input.arrival_min`).
+- Маршрут до вокзала по координатам дома (`home_pt`, `address.locate`).
+- Кафе: бизнес-ланч, виды акций, «Меню и цены — Яндекс Карты»; «Яндекс Карты» ведут на карточку по `ymaps_id`.
+- У театра — «Афиша на эту дату — Яндекс Афиша» (`AFISHA_CITY` в `planner.py`; в Выборге и Коломне ссылки нет).
+- Форма: ссылки у выбранного жилья; отель с Островка по ссылке заполняет «свою бронь»; на телефоне меню ☰
+  и «Заменить» под карточкой жилья.
 
 ## 4. Стек
 
-- **Backend:** Python 3.11+, Starlette, uvicorn, PostgreSQL 16 (SQLAlchemy Core 2, psycopg 3, Alembic), boto3,
-  python-multipart, pypdf, certifi; внешние сервисы — YandexGPT, Yandex Vision OCR, DaData или Photon,
-  Трипстер API 2.0, Суточно.ру и Яндекс Карты парсингом страниц, SMTP reg.ru.
-- **Frontend:** React 19 + TypeScript 6, esbuild (`build.mjs` → `dist/assets/app.js`, `app.css`).
-- **Тесты:** unittest (129), moto для S3, Playwright + Chromium (`tests/e2e_smoke.py`).
-- Ключи и настройки — `backend/.env` (образец `.env.example`, в конце — новые настройки сервера).
+- **Backend:** Python 3.11+ (на Mac 3.15), Starlette, uvicorn, PostgreSQL 16 (SQLAlchemy Core 2, psycopg 3, Alembic),
+  boto3; внешние сервисы — YandexGPT, Yandex Vision OCR, DaData или Photon, Яндекс Расписания, Туту.ру,
+  Авиасейлс (Travelpayouts), Трипстер API, парсинг страниц Суточно.ру, Островка и Яндекс Карт.
+- **Frontend:** React 19 + TypeScript, esbuild (`npm run build`).
+- **Тесты:** unittest (159), moto для S3, Playwright (`tests/e2e_smoke.py`).
 
-Команды проверки (из `backend`): `.venv/bin/python -m unittest discover -s tests`,
-`.venv/bin/python tests/e2e_smoke.py <папка>`, `cd ../frontend && npx tsc --noEmit`.
+## 5. План дальнейшей работы
 
-## 5. Следующие шаги
+Решения принимаем по каждому пункту отдельно.
 
-1. (сделано) GitHub с Mac подключён по SSH (ключ ~/.ssh/id_ed25519), коммиты отправлены.
-2. Проверить Docker-сборку там, где есть Docker (`docker compose up -d --build`), и бакет Yandex Object Storage
-   (`STORAGE=s3`, сервисный аккаунт с ролью storage.editor).
-3. (сделано 2026-10-30) https://planroute.ru на облачном сервере reg.ru — см. README «База, файлы и запуск на сервере».
-   Осталось: почта для писем (SMTP_HOST пуст), перенос аккаунта и поездок с Mac, копии базы вне сервера (ежедневные на сервере — `scripts/backup.sh`); перенос с прежнего сервера —
-   `sqlite-to-pg` и `files-to-s3` (порядок — в комментарии `docker-compose.yml` и в CLAUDE.md).
-   Rate limit в памяти — при нескольких процессах перенести в Redis или nginx `limit_req`.
-4. Данные: новые города — Золотое кольцо (Сергиев Посад, Переславль-Залесский, Ростов Великий, Ярославль, Кострома,
-   Иваново, Суздаль, Владимир) — позже. Сделано: Коломна (c10734, «Экспресс» 2000650; электрички с Казанского вокзала, выезд в Зарайск), Сочи с сезонностью (`months`), настоящие
-   заведения и отели Калининграда и Н. Новгорода, Выборг целиком (каталог, ROUTES из Москвы и Петербурга, ссылки,
-   код Расписаний c969), Краснодар (c35, KRR; аэропорт работает с 09.2025, но часто закрыт ограничениями), ночные поезда, часовой пояс Калининграда (`tz`). Код города в Расписаниях без ключа API —
-   suggests.rasp.yandex.net/all_suggests?format=old&part=<город>. Адреса новых
-   городов сверены: Трипстер (Sergiyev_Posad, Pereslavl_Zalessky, Rostov — остальные по-английски как есть),
-   Авито (sergiev_posad, pereslavl-zalesskiy, rostov), Островок (russia/sergiyev_posad, russia/pereslavl-zalesskiy,
-   russia/rostov, russia/nizhniy_novgorod).
-5. Этап B: черновики карточек мест моделью, объяснение выбора мест, правка программы словами.
+**Эксплуатация (в первую очередь)**
+1. Почта для писем: ящик на planroute.ru у reg.ru (почта уже на хостинге «Хост-0») → `SMTP_*` в `backend/.env`
+   на сервере. Без этого «Забыли пароль?» не работает.
+2. Связь с сервером: при следующем сбое разобрать запись трафика; если данные от сервера не уходят дальше сети
+   reg.ru — обращение в поддержку reg.ru с записью.
+3. Перенос аккаунта и поездок с Mac на сервер (если нужны), затем `/api/health` и смоук на сайте.
+4. Мониторинг: внешняя проверка `/api/health` раз в 5 минут (например, UptimeRobot) с письмом при падении.
 
-## 6. Сессия 2026-11-02: развёртывание на Mac и афиша
+**Продукт**
+5. Тикетленд / МТС Live: пользователь регистрируется на affiliates.ticketland.ru; после — партнёрские ссылки
+   и выгрузка афиши → настоящие спектакли с датой, временем и ценой в театральный вечер.
+6. Яндекс Афиша: ссылка на дату у театров сделана; договор с Афишей (данные о спектаклях) — когда у сайта будут посетители.
+7. Этап B: черновики карточек мест моделью для новых городов (быстрее добавлять города).
+8. Цены гостиниц на даты (Островок API / партнёрка) вместо оценок в каталоге.
 
-- Репозиторий склонирован в `/Users/ruslan_sayapov/planroute` (прежний путь `/Users/ruslan/planroute` в CLAUDE.md устарел).
-  Mac: macOS 13.4.1 Intel, Homebrew 3.2.17 устарел (каталог 2019 г.), Docker не встал бы (старая macOS).
-- Окружение поставлено установщиками, без Homebrew: Python 3.12 (python.org), Node 22 (nodejs.org). Отдельный
-  PostgreSQL не нужен: `manage.py devdb` сам скачивает бинарники. Python 3.12 не в PATH — запуск:
-  `PATH=/Library/Frameworks/Python.framework/Versions/3.12/bin:$PATH bash scripts/run.sh`.
-- `scripts/setup.sh` отработал; тесты: 148, не проходит только `test_infra` (не установился `moto`, нужен лишь для S3).
-- `backend/.env` с рабочими ключами положен пользователем; сервер на http://localhost:8000.
-- Замечания пользователь пишет в `tasks.md` — смотреть его в начале работы.
-- Сделано: у театра в программе ссылка «Афиша на эту дату — Яндекс Афиша»
-  (`afisha.yandex.ru/<город>/theatre?date=…`, `AFISHA_CITY` в `planner.py`; для Выборга ссылки нет).
-- Открыто: Тикетленд — ждём регистрации пользователя на affiliates.ticketland.ru и данных из кабинета.
+**Данные**
+9. Золотое кольцо — отложено пользователем: Сергиев Посад, Переславль-Залесский, Ростов Великий, Ярославль,
+   Кострома, Суздаль, Владимир (адреса Трипстера, Авито, Островка частично сверены — см. историю Summary в git).
+10. Раз в месяц — `tools/yandex_facts.py --write` по всем городам: закрытые заведения, часы, акции.

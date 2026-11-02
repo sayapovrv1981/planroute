@@ -72,7 +72,11 @@ git archive --format=tar HEAD | ssh root@5.63.152.234 'tar -x -C /opt/planroute 
 **Резервные копии:** `scripts/backup.sh` каждый день в 04:30 (systemd-таймер `planroute-backup`, файлы
 `scripts/planroute-backup.*` скопированы в `/etc/systemd/system/`) кладёт в `/opt/backups` копию базы `db-<дата>.dump`
 (`pg_dump -Fc`, сразу проверяется `pg_restore --list`) и документы `uploads-<дата>.tar.gz`, если они есть на диске;
-хранит 14 дней. Сделать копию сейчас — `systemctl start planroute-backup`, результат — `journalctl -u planroute-backup`.
+хранит 14 дней. Та же копия уходит в объектное хранилище reg.ru (бакет `planrote-backup`, `https://s3.regru.cloud`),
+там — 30 дней: переживёт потерю сервера. Ключи — в `/root/backup-s3.env` на сервере (`S3_ENDPOINT`, `S3_BUCKET`,
+`S3_ACCESS_KEY`, `S3_SECRET_KEY`; в git их нет), клиент — образ `amazon/aws-cli` с системными сертификатами
+и `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` (без этого reg.ru отвечает ошибкой).
+Сделать копию сейчас — `systemctl start planroute-backup`, результат — `journalctl -u planroute-backup`.
 Восстановить базу из копии (приложение на это время остановить):
 
 ```
@@ -80,6 +84,9 @@ cd /opt/planroute && docker compose stop app
 docker compose exec -T db pg_restore -U tripplan -d tripplan --clean --if-exists --no-owner < /opt/backups/db-<дата>.dump
 docker compose start app
 ```
+
+Сервер потерян — копия из хранилища: в панели Рег.облака «Хранилище S3» → бакет → скачать последний `db-<дата>.dump`
+и восстановить той же командой `pg_restore` на новом сервере.
 
 Данные — в PostgreSQL (`DATABASE_URL`), схема — миграции Alembic в `backend/migrations/`, файлы документов —
 на диске или в S3-совместимом хранилище (`STORAGE=s3`, Yandex Object Storage). Все настройки сервера —
