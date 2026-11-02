@@ -685,5 +685,19 @@ class KolomnaTest(unittest.TestCase):
         self.assertEqual(len(lunches), len(set(lunches)))
 
 
+
+class StreetDistanceTest(unittest.TestCase):
+    def test_walk_by_streets_across_river(self):
+        # Петропавловская крепость → музей-квартира Пушкина: по прямой 1,1 км, а пешком — через Троицкий мост
+        ctx = planner.trip_ctx(planner.plan_trip(dict(BASE)))
+        tr = planner.transfer(ctx, ctx.place("petropavl"), ctx.place("pushkin"))
+        self.assertGreater(tr["km"], 2.5)  # оценка «по прямой × 1,3» дала бы 1,4 км
+        self.assertEqual(tr["mode"], "метро или такси")  # дальше 2 км — уже не пешком
+        # точка вне каталога (свой адрес) — по-прежнему оценка по прямой
+        home = {"lat": 59.95, "lon": 30.3200}
+        self.assertEqual(planner.transfer(ctx, home, ctx.place("petropavl"))["km"],
+                         round(catalog.haversine_km(59.95, 30.32, 59.95, 30.3166) * 1.3, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

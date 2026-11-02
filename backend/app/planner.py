@@ -385,6 +385,7 @@ class Ctx:
     def __init__(self, ti: TripInput):
         self.ti = ti
         self.data = catalog.load(catalog.normalize_city(ti.city))
+        self.walk = catalog.walk_table(catalog.normalize_city(ti.city))  # пешком по улицам OSM, м
         self.city = self.data["city"]
         self.kids = len(ti.kids_ages)
         self.small_kids = any(a < 7 for a in ti.kids_ages)
@@ -453,10 +454,13 @@ def trip_ctx(trip: dict) -> Ctx:
 # --------------------------------------------------------------- transfers
 
 def transfer(ctx: Ctx, a: dict | None, b: dict | None) -> dict | None:
-    """Переход между точками: пешком, если близко, иначе метро/такси (с вещами — всегда транспорт)."""
+    """Переход между точками: пешком, если близко, иначе метро/такси (с вещами — всегда транспорт).
+    Расстояние — пешее по улицам из таблицы OpenStreetMap (tools/osm_walk.py), для точек вне каталога — оценка."""
     if not a or not b or a.get("lat") is None or b.get("lat") is None:
         return None
-    km = catalog.haversine_km(a["lat"], a["lon"], b["lat"], b["lon"]) * 1.3
+    # по улицам (OpenStreetMap: мосты, реки, обходы), если обе точки из каталога; иначе по прямой × 1,3
+    street = ctx.walk.get((f"{a['lat']:.5f},{a['lon']:.5f}", f"{b['lat']:.5f},{b['lon']:.5f}"))
+    km = street / 1000 if street is not None else catalog.haversine_km(a["lat"], a["lon"], b["lat"], b["lon"]) * 1.3
     if km < 0.05:
         return {"minutes": 0, "km": 0.0, "mode": "рядом"}
     far = b.get("far") or a.get("far")  # выезд за город: время и способ дороги — из каталога
@@ -1232,12 +1236,14 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
     else:
         window_end = 18 * 60 + 30
 
-    def fits(t_end: int, end_point: dict) -> bool:
+    def fits(t_end: int, end_point: dict, steps: list[tuple] = ()) -> bool:
+        """steps — шаги дня из schedule_activities: кафе, где обедаем, к ужину перед спектаклем уже не годится."""
         if d.kind in ("last", "single"):  # к поезду — от последнего места, а не от центра
             return t_end + to_station(end_point) <= ret - ctx.back_boarding
         if d.theatre:  # дорога к лёгкому ужину (60) у театра и от кафе к спектаклю — через то кафе, что выберем потом
             start = parse_hm(d.theatre["start"])
-            f = nearest_food(ctx, d.theatre, d.date, start - 90, used_food, "dinner")
+            lunch = {p["id"] for kind, p in steps if kind == "lunch"}
+            f = nearest_food(ctx, d.theatre, d.date, start - 90, used_food | lunch, "dinner")
             legs = [transfer(ctx, end_point, f[0]), transfer(ctx, f[0], d.theatre)] if f else [
                 transfer(ctx, end_point, d.theatre), {"minutes": 20}]
             return t_end + sum(tr["minutes"] for tr in legs if tr) + 60 <= start
@@ -1247,7 +1253,7 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
     while True:
         cost, steps, t_end, end_point, lunch_done2 = schedule_activities(ctx, d, t, point, places, lunch_done,
                                                                          hotel if late_checkin else None, used_food)
-        if fits(t_end, end_point) or not places:
+        if fits(t_end, end_point, steps) or not places:
             break
         optional = [p for p in places if not p.get("booked")]  # брони по билетам не выкидываем
         if not optional:
@@ -1267,7 +1273,7 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
         cand = min(extra, key=lambda p: catalog.haversine_km(here["lat"], here["lon"], p["lat"], p["lon"]) - 0.3 * score(ctx, p))
         trial = places + [cand]
         res = schedule_activities(ctx, d, t, point, trial, lunch_done, hotel if late_checkin else None, used_food)
-        if not fits(res[2], res[3]) or res[0] - cost >= 400:
+        if not fits(res[2], res[3], res[1]) or res[0] - cost >= 400:
             ctx.used_places.add(cand["id"])  # не влезает — больше не пробуем
             ctx.skipped.add(cand["id"])
             continue

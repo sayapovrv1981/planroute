@@ -60,8 +60,20 @@ def load(filename: str) -> dict:
     return data
 
 
+@lru_cache(maxsize=None)
+def walk_table(filename: str) -> dict[tuple[str, str], int]:
+    """Пешие расстояния по улицам OpenStreetMap, м: {(точка, точка): метры}; точка — «lat,lon» с 5 знаками.
+    Считает tools/osm_walk.py в data/walk/<город>.json; нет файла — пустая таблица (оценка по прямой)."""
+    path = DATA_DIR / "walk" / filename.replace("_places.json", ".json")
+    if not path.is_file():
+        return {}
+    w = json.loads(path.read_text(encoding="utf-8"))
+    pts = w["points"]
+    return {(a, b): m for a, row in zip(pts, w["m"]) for b, m in zip(pts, row) if m is not None and a != b}
+
+
 def reset_cache() -> None:
-    for f in (_cities, _index, load):
+    for f in (_cities, _index, load, walk_table):
         f.cache_clear()
 
 

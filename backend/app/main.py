@@ -41,7 +41,7 @@ def err(status: int, message: str) -> JSONResponse:
     return JSONResponse({"error": message}, status_code=status)
 
 
-BUY_LINK = re.compile(r"(Купить|Найти билеты|Забронировать|Подобрать и забронировать|Цены на даты|Афиша и билеты|"
+BUY_LINK = re.compile(r"(Купить|Найти билеты|Забронировать|Подобрать и забронировать|Цены на даты|Афиша и билеты|Афиша на эту дату|"
                       r"Сайт и билеты|Все экскурсии|Экскурсии с гидом)")
 
 
