@@ -699,5 +699,29 @@ class StreetDistanceTest(unittest.TestCase):
                          round(catalog.haversine_km(59.95, 30.32, 59.95, 30.3166) * 1.3, 1))
 
 
+
+class TheatreNoteTest(unittest.TestCase):
+    def test_no_evening_for_theatre_explained(self):
+        # Казань на 2 дня поездом: приезд в 21:00, отъезд в 18:00 — вечера для спектакля нет, говорим почему
+        trip = planner.plan_trip(dict(KAZAN, transport="train", start_time="09:00", return_time="18:00", days=2,
+                                      start_date="2026-11-06", wishes="театр"))
+        self.assertFalse([i for d in trip["days"] for i in d["items"] if i["kind"] == "theatre"])
+        note = trip["summary"]["theatre_note"]
+        self.assertIn("спектакль не поместился", note)
+        self.assertIn("приезжаете в 21:00", note)
+        self.assertIn("добавьте к поездке день", note)
+        trip = planner.plan_trip(dict(KAZAN, transport="train", days=3, start_date="2026-11-06", wishes="театр"))
+        self.assertIsNone(trip["summary"]["theatre_note"])  # поместился — без заметки
+
+
+
+class DepartureFromArrivalTest(unittest.TestCase):
+    def test_empty_departure_counted_back_from_arrival(self):
+        ti = planner.TripInput.from_dict(dict(BASE, transport="train", start_time="", arrive_time="13:00"))
+        self.assertEqual(ti.start_time, "09:00")  # «Сапсан» ≈ 4 ч: выехать в 09:00, чтобы прибыть в 13:00
+        with self.assertRaises(ValueError):
+            planner.TripInput.from_dict(dict(BASE, transport="train", start_time="", arrive_time=""))
+
+
 if __name__ == "__main__":
     unittest.main()

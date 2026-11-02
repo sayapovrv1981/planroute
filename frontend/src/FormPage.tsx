@@ -350,6 +350,7 @@ export function FormPage() {
           <Section n={4} title="На чём">
             <Schedule
               keep={fromTicket}
+              boarding={meta?.boarding_default || {}}
               f={f}
               set={set}
               transports={meta?.transports || []}
@@ -684,6 +685,7 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
         ]
           .filter(Boolean)
           .join(" · "),
+        href: /^https?:\/\//.test(m.url) ? m.url : null,
         links: [
           ...(/^https?:\/\//.test(m.url) ? [{ label: "Бронь на сайте", url: m.url }] : []),
           m.lat != null && m.lon != null
@@ -726,7 +728,15 @@ function StayPicker({ f, set, kinds, days }: { f: FormState; set: SetF; kinds: {
           {picked.photo ? <OwnPhoto src={picked.photo} alt={picked.name} /> : picked.wiki && <Photo title={picked.wiki} alt={picked.name} area={picked.wiki_area} />}
           <div>
             <small className="stay-tag">{f.stay_url || m ? "Своя бронь" : auto ? "Подберём сами по бюджету" : "Ваш выбор"}</small>
-            <b>{picked.name}</b>
+            <b>
+              {picked.href ? (
+                <a className="title-link" href={picked.href} target="_blank" rel="noreferrer" title="Открыть страницу жилья">
+                  {picked.name} ↗
+                </a>
+              ) : (
+                picked.name
+              )}
+            </b>
             <span>{picked.meta}</span>
             {!!picked.links?.length && (
               <div className="links">
@@ -1107,7 +1117,7 @@ type Leg = { title: string; tk: TransportKey; from: string; to: string; dep: "st
 type Pick = (tk: TransportKey, k: string) => void;
 type KeepRef = { current: Set<string> };
 
-function Schedule({ f, set, transports, pick, driveMin, keep }: { f: FormState; set: SetF; transports: { key: string; label: string }[]; pick: Pick; driveMin?: number; keep: KeepRef }) {
+function Schedule({ f, set, transports, pick, driveMin, keep, boarding }: { f: FormState; set: SetF; transports: { key: string; label: string }[]; pick: Pick; driveMin?: number; keep: KeepRef; boarding: Record<string, number> }) {
   const auto = f.transport === "auto" || f.return_transport === "auto";
   // заранее подгружаем расписания всех видов транспорта на обе даты
   useEffect(() => {
@@ -1145,6 +1155,7 @@ function Schedule({ f, set, transports, pick, driveMin, keep }: { f: FormState; 
           transports={transports}
           pick={pick}
           keep={keep}
+          boarding={boarding}
           open={openLeg === l.dep}
           setOpen={(v) => setOpenLeg(v ? l.dep : null)}
           onPicked={() => setOpenLeg(l.dep === "start_time" && !f.back_number ? "return_time" : null)}
@@ -1242,14 +1253,26 @@ type LegProps = {
   transports: { key: string; label: string }[];
   pick: Pick;
   keep: KeepRef;
+  /** запас на посадку по умолчанию для каждого вида транспорта (из /api/meta) */
+  boarding: Record<string, number>;
   open: boolean;
   setOpen: (v: boolean) => void;
   onPicked: () => void;
 };
 
+/** Промежутки дня, как на Авиасейлс: кнопка — фильтр списка и время отъезда. */
+type Slot = { key: string; label: string; from: number; to: number };
+const SLOTS: Slot[] = [
+  { key: "night", label: "Ранним утром", from: 0, to: 7 * 60 },
+  { key: "morning", label: "Утром", from: 7 * 60, to: 12 * 60 },
+  { key: "day", label: "Днём", from: 12 * 60, to: 18 * 60 },
+  { key: "evening", label: "Вечером", from: 18 * 60, to: 21 * 60 },
+  { key: "late", label: "Поздним вечером", from: 21 * 60, to: 24 * 60 },
+];
+
 const fromMin = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
-function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, setOpen, onPicked }: LegProps) {
+function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, boarding, open, setOpen, onPicked }: LegProps) {
   const tr = f[l.tk]; // туда и обратно — каждое на своём транспорте
   const auto = tr === "auto";
   const kind = auto ? "train" : tr;
@@ -1300,12 +1323,28 @@ function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, set
   // выбранный рейс: по номеру, а у автобусов (номеров нет) — по времени отправления и прибытия
   const selected =
     match ?? items.find((t) => !t.number && t.departure === f[l.dep] && (!f[l.arr] || t.arrival === f[l.arr]));
-  // рейс, ближайший к указанному времени отправления
+  // промежуток дня («Утром» и т. п.): список — только рейсы с отправлением в нём
+  const [slot, setSlot] = useState<Slot | null>(null);
+  const inSlot = (t: Trip) => !slot || (toMin(t.departure)! >= slot.from && toMin(t.departure)! < slot.to);
+  const pool = items.filter(inSlot);
+  // «Туда»: от выхода из дома до отправления — дорога до вокзала и запас на посадку
+  const isOut = l.tk === "transport";
+  const lead = isOut && kind !== "car" ? f.to_station_min + (f.boarding_min === "" ? boarding[kind] ?? 30 : Number(f.boarding_min)) : 0;
+  const [fromHome, setFromHome] = useState(false); // время задали выходом из дома — нужен первый рейс, на который успеваем
+  // рейс, ближайший к указанному времени отправления; без него — к времени прибытия
   const want = toMin(f[l.dep]);
-  const near =
-    want == null || !items.length
-      ? undefined
-      : items.reduce((a, b) => (Math.abs(toMin(b.departure)! - want) < Math.abs(toMin(a.departure)! - want) ? b : a));
+  const wantArr = want == null ? toMin(f[l.arr]) : null;
+  const closest = (key: "departure" | "arrival", m: number) =>
+    pool.reduce((a, b) => (Math.abs(toMin(b[key])! - m) < Math.abs(toMin(a[key])! - m) ? b : a));
+  const near = !pool.length
+    ? undefined
+    : want != null
+      ? fromHome
+        ? pool.find((t) => toMin(t.departure)! >= want) ?? closest("departure", want)
+        : closest("departure", want)
+      : wantArr != null
+        ? closest("arrival", wantArr)
+        : undefined;
   const target = selected ?? near;
 
   // цена билета «от» берётся у выбранного рейса и уходит в бюджет поездки
@@ -1319,7 +1358,7 @@ function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, set
   const hasList = !!PICK_WORD[tr] && (!sched || sched.available);
   // набирают номер — показываем подходящие рейсы, пока номер не совпал целиком
   const partial = typed && !match ? items.filter((t) => normNum(t.number).includes(typed)) : [];
-  const shown = partial.length ? partial : items;
+  const shown = partial.length ? partial : pool;
 
   // клик мимо поля и списка закрывает список
   useEffect(() => {
@@ -1355,10 +1394,11 @@ function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, set
     const list = listRef.current;
     const el = list?.querySelector<HTMLElement>("[data-target]");
     if (list && el) list.scrollTop = el.offsetTop - 6; // .trips — position: relative
-  }, [open, !!sched, target?.number, target?.departure]);
+  }, [open, !!sched, target?.number, target?.departure, slot]);
 
   // ввели время, а в него уходит ровно один рейс — подставляем его номер и прибытие
   function onDepChange(v: string) {
+    setFromHome(false);
     set(l.dep, v);
     const same = items.filter((t) => t.departure === v);
     if (same.length === 1 && (!match || match.departure !== v)) {
@@ -1432,10 +1472,53 @@ function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, set
           </button>
         ))}
       </div>
+      <div className="chips slots" role="group" aria-label="Время отправления">
+        {SLOTS.map((sl) => (
+          <button
+            type="button"
+            key={sl.key}
+            className={`seg sm ${slot?.key === sl.key ? "on" : ""}`}
+            aria-pressed={slot?.key === sl.key}
+            title={`${fromMin(sl.from)}–${sl.to === 24 * 60 ? "24:00" : fromMin(sl.to)}`}
+            onClick={() => {
+              if (slot?.key === sl.key) return setSlot(null); // повторное нажатие — снова все рейсы
+              setSlot(sl);
+              setFromHome(false);
+              // время отъезда — первый рейс в этом промежутке, без расписания — начало промежутка
+              const first = items.find((t) => toMin(t.departure)! >= sl.from && toMin(t.departure)! < sl.to);
+              set(l.dep, first ? first.departure : fromMin(sl.from === 0 ? 6 * 60 : sl.from));
+              if (!first || first.number !== f[l.num]) set(l.num, "");
+              if (kind !== "car") set(l.arr, "");
+              if (hasList) setOpen(true);
+            }}
+          >
+            {sl.label}
+          </button>
+        ))}
+      </div>
       <div className="row">
+        {lead > 0 && (
+          <label className="field">
+            <span className="label">Выход из дома</span>
+            <input
+              type="time"
+              value={want != null ? fromMin((want - lead + 24 * 60) % (24 * 60)) : ""}
+              onChange={(e) => {
+                const h = toMin(e.target.value);
+                if (h == null) return;
+                setFromHome(true);
+                setSlot(null);
+                set(l.dep, fromMin(h + lead)); // к нему подберём первый рейс, на который успеваем
+                set(l.num, "");
+                set(l.arr, "");
+                if (hasList) setOpen(true);
+              }}
+            />
+          </label>
+        )}
         <label className="field">
           <span className="label">{w.dep}</span>
-          <input type="time" required value={f[l.dep]} onChange={(e) => onDepChange(e.target.value)} />
+          <input type="time" value={f[l.dep]} onChange={(e) => onDepChange(e.target.value)} />
         </label>
         {!auto && (
           <label className="field">
@@ -1602,7 +1685,11 @@ function LegFields({ leg: l, f, set, driveMin, transports, pick, keep, open, set
                   {t === selected ? (
                     <em className="tag">выбран</em>
                   ) : t === near && want != null ? (
-                    <em className="tag soft">{nearLabel(toMin(t.departure)! - want, f[l.dep])}</em>
+                    <em className="tag soft">
+                      {fromHome ? `успеваете, если выйти в ${fromMin((want - lead + 24 * 60) % (24 * 60))}` : nearLabel(toMin(t.departure)! - want, f[l.dep])}
+                    </em>
+                  ) : t === near && wantArr != null ? (
+                    <em className="tag soft">ближе всего к прибытию в {f[l.arr]}</em>
                   ) : null}
                 </span>
                 <small>

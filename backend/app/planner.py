@@ -227,6 +227,14 @@ class TripInput:
             raise ValueError("Неизвестный вид транспорта обратно")
         if self.stay not in STAY_LABEL:
             raise ValueError("Неизвестный вид жилья")
+        # отправление не указано, а прибытие есть (в форме выбирали по времени прибытия) — считаем назад по дороге
+        for dep, arr, tk in (("start_time", "arrive_time", "transport"), ("return_time", "return_arrive_time", "return_transport")):
+            if not str(getattr(self, dep) or "").strip():
+                route = route_for(self.city, self.origin, auto_transport(self.city, self.origin)
+                                  if getattr(self, tk) == "auto" else getattr(self, tk)) or DEFAULT_ROUTE
+                if not str(getattr(self, arr) or "").strip():
+                    raise ValueError("Укажите время отправления " + ("туда" if dep == "start_time" else "обратно"))
+                setattr(self, dep, fmt_hm((parse_hm(getattr(self, arr)) - route["minutes"]) % (24 * 60)))
         parse_hm(self.start_time)
         parse_hm(self.return_time)
         start = date.fromisoformat(self.start_date)
@@ -618,6 +626,19 @@ def manual_stay_place(m: dict) -> dict:
     if p["address"]:
         p["note"] += " · " + p["address"]
     return p
+
+
+def stay_page(ctx: Ctx, p: dict) -> str | None:
+    """Страница этого жилья у источника — по ней ведёт название в программе и в форме: объявление Суточно.ру на даты,
+    ссылка своей брони (Островок, Авито…), у отеля из каталога — бронь на Островке, сайт или карточка на Картах."""
+    if p.get("placeholder"):
+        return None  # «квартира посуточно (подбор)» — конкретного объявления нет
+    if p.get("source") == "sutochno":
+        return listing_link(ctx, p)
+    for key in ("booking_url", "url"):
+        if str(p.get(key) or "").startswith("http"):
+            return p[key]
+    return f"https://yandex.ru/maps/org/{p['ymaps_id']}/" if p.get("ymaps_id") else None
 
 
 def tripster_link(ctx: Ctx) -> str | None:
@@ -1481,6 +1502,8 @@ def plan_trip(raw: dict, custom_places: dict | None = None, events: list[dict] |
         target = next((d for d in evening_days if d.kind == "middle"), evening_days[0] if evening_days else None)
         if target:
             target.theatre = th
+        else:
+            ctx.theatre_note = theatre_note(ctx, th)
 
     assign_days(ctx, days)
     ctx.used_places = {p["id"] for d in days for p in d.places}
@@ -1517,6 +1540,7 @@ def plan_trip(raw: dict, custom_places: dict | None = None, events: list[dict] |
             "wishes_note": wishes_note(ctx),
             "hotel_tier": ctx.tier,
             "skipped_bookings": skipped_events,  # брони не на даты поездки — в программу не встали
+            "theatre_note": getattr(ctx, "theatre_note", None),  # просили театр, но вечера для него нет
         },
         "days": out_days,
     }
@@ -1540,6 +1564,20 @@ def transport_summary(ctx: Ctx) -> str:
         return out
     back = one(ctx.back_transport, ctx.back_route, ctx.back_known, ti.back_number)
     return f"туда — {out[0].lower() + out[1:]}, обратно — {back[0].lower() + back[1:]}"
+
+
+def theatre_note(ctx: Ctx, th: dict) -> str:
+    """Почему театра нет в программе и что поменять: в поездке нет свободного вечера."""
+    start = parse_hm(th["start"])
+    if ctx.ti.days == 1:
+        why = "поездка на один день — вечера для спектакля нет"
+        fix = "добавьте к поездке день"
+    else:
+        why = (f"в первый день вы приезжаете в {fmt_hm(ctx.arrive_at % (24 * 60))}, а спектакль начинается в {th['start']}, "
+               f"во второй — уезжаете в {ctx.ti.return_time}")
+        fix = (f"добавьте к поездке день или выберите дорогу туда с прибытием до {fmt_hm(start - 180)}"
+               if ctx.ti.days == 2 else "добавьте к поездке день")
+    return f"{th['name']}: спектакль не поместился в программу — {why}. Чтобы сходить, {fix}."
 
 
 def wishes_note(ctx: Ctx) -> str | None:

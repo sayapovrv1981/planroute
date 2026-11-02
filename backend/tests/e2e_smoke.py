@@ -292,14 +292,21 @@ with sync_playwright() as p:
     expect(page.locator(".tl-item.focused")).to_have_count(1)
     page.screenshot(path=str(out / "3-trip-focus.png"))
 
-    # --- жильё в маршруте не заменить: «⇄ Изменить жильё» ведёт в вводные, к разделу «Где жить»
+    # --- жильё меняется прямо в маршруте: «⇄ Заменить жильё» — варианты, выбор строит программу заново
+    #     (новая поездка с этим жильём в вводных), прежняя остаётся по своей ссылке
     page.get_by_role("tab").first.click()
-    stay_card = page.locator(".tl-card").filter(has=page.get_by_role("button", name="⇄ Изменить жильё")).first
-    expect(stay_card.get_by_role("button", name="⇄ Заменить")).to_have_count(0)
-    stay_card.get_by_role("button", name="⇄ Изменить жильё").click()
-    expect(page.get_by_role("heading", name="Изменить вводные поездки")).to_be_visible()
-    expect(page.locator("#stay")).to_be_in_viewport()
-    page.go_back()
+    old_url = page.url
+    stay_card = page.locator(".tl-card").filter(has=page.get_by_role("button", name="⇄ Заменить жильё")).first
+    expect(stay_card.get_by_role("button", name="⇄ Заменить", exact=True)).to_have_count(0)
+    stay_card.get_by_role("button", name="⇄ Заменить жильё").click()
+    option = stay_card.locator(".alts .alt").first
+    expect(option).to_be_visible(timeout=20000)
+    new_stay = option.locator("b").first.inner_text()
+    page.screenshot(path=str(out / "3-trip-stay-replace.png"))
+    option.get_by_role("button").click()
+    expect(page).not_to_have_url(old_url, timeout=30000)
+    expect(page.locator(".tl-card").filter(has_text=new_stay).first).to_be_visible()
+    page.goto(old_url)
     expect(page.get_by_role("heading", name="Выход из дома")).to_be_visible()
 
     # --- назад к вводным: форма заполнена

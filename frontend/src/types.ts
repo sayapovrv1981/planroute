@@ -26,6 +26,8 @@ export type Alternative = {
   km?: number | null;
   /** «≈ 1,2 км от предыдущего места, пешком 15 мин» */
   dist?: string | null;
+  /** страница жилья у источника (объявление, бронь, сайт отеля) — по ней ведёт название */
+  href?: string | null;
   /** сайт, бронь, Яндекс Карты — у жилья в форме */
   links?: { label: string; url: string; ad?: string | null }[];
 };
@@ -117,6 +119,10 @@ export type TripInput = {
   to_station_min: number;
   boarding_min: number | null;
   arrival_min?: number;
+  /** прибытие по расписанию и цена билета «от» — из выбранного в форме рейса */
+  arrive_time?: string;
+  out_price?: number;
+  back_price?: number;
   sight_buffer_min: number;
   step_min: number;
   min_rating: number;
@@ -137,6 +143,8 @@ export type Trip = {
     wishes: string[];
     /** как модель поняла пожелания; нет, если разбирали по ключевым словам */
     wishes_note?: string | null;
+    /** просили театр, но в поездке нет свободного вечера — почему и что поменять */
+    theatre_note?: string | null;
   };
   days: Day[];
   budget: Budget;

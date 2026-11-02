@@ -76,7 +76,7 @@ def present(tid: str, trip: dict) -> dict:
                 # оплачено или по своему билету — купить больше не предлагаем
                 it["links"] = [l for l in it["links"] if not BUY_LINK.match(l["label"])]
                 it["excursions"] = []
-            href = planner.listing_link(ctx, place) if place and place.get("source") == "sutochno" else None
+            href = planner.stay_page(ctx, place) if place and place.get("category") == "hotel" else None
             it["href"] = schedule.partner_any(href) if href else None
             it["href_ad"] = schedule.ad_label(it["href"]) if href else None
             alts = []
@@ -225,6 +225,8 @@ async def stays(request: Request) -> JSONResponse:
         meta = stay_meta(p)
         r["meta"] = " · ".join(m for m in [meta[0], meta[1], total, *meta[2:]] if m)
         r["links"] = shown_links(planner.links_for(ctx, p))  # сайт отеля, бронь, Яндекс Карты — как в программе
+        href = planner.stay_page(ctx, p)
+        r["href"] = schedule.partner_any(href) if href else None  # по названию — страница жилья у источника
     opts["search"] = stay_search(ctx)
     return JSONResponse(opts)
 
@@ -273,7 +275,7 @@ async def stay_preview(request: Request) -> JSONResponse:
         links.append({"label": "Яндекс Карты", "url": f"https://yandex.ru/maps/?pt={place['lon']},{place['lat']}&z=17&l=map"})
     return JSONResponse({"id": place["id"], "name": place["name"], "meta": " · ".join(m for m in stay_meta(place) if m),
                          "photo": sutochno.thumb(place["photos"][0]) if place.get("photos") else None,
-                         "links": shown_links(links)})
+                         "links": shown_links(links), "href": place.get("url")})
 
 
 def checkin_item(trip: dict) -> dict | None:

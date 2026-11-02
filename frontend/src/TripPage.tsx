@@ -4,7 +4,7 @@ import { api, dateLabel, fmtDur, fmtHM, plural, rub } from "./api";
 import { Logo, navigate, TopNav, UserMenu } from "./nav";
 import { AskEdit } from "./AskEdit";
 import { AltList, OwnPhoto, Photo, StayImport } from "./Picks";
-import type { Alternative, Day, Item, Trip } from "./types";
+import type { Alternative, Day, Item, Trip, TripInput } from "./types";
 
 const KIND: Record<Item["kind"], { label: string; cls: string }> = {
   travel: { label: "Дорога", cls: "k-road" },
@@ -164,6 +164,7 @@ export function TripPage({ id }: { id: string }) {
             {trip.input.wishes && <span className="accent">{trip.input.wishes}</span>}
           </div>
           {trip.summary.wishes_note && <p className="wishes-note">Как мы поняли пожелания: {trip.summary.wishes_note}</p>}
+          {trip.summary.theatre_note && <p className="wishes-note warn">{trip.summary.theatre_note}</p>}
           <div className="head-actions">
             <button type="button" className="ghost" onClick={() => navigator.clipboard?.writeText(window.location.href)}>
               Скопировать ссылку
@@ -207,6 +208,7 @@ export function TripPage({ id }: { id: string }) {
                 step={step}
                 focused={focus === it.id}
                 tripId={trip.id}
+                input={trip.input}
                 dayIndex={di}
                 actions={actions}
               />
@@ -276,6 +278,7 @@ function ItemRow({
   step,
   focused,
   tripId,
+  input,
   dayIndex,
   actions,
 }: {
@@ -284,10 +287,12 @@ function ItemRow({
   step: number;
   focused: boolean;
   tripId: string;
+  input: TripInput;
   dayIndex: number;
   actions: Actions;
 }) {
   const [open, setOpen] = useState(false);
+  const [stayOpen, setStayOpen] = useState(false);
   const [docForm, setDocForm] = useState(false);
   const [adding, setAdding] = useState(false);
   const k = KIND[it.kind] || KIND.custom;
@@ -353,7 +358,7 @@ function ItemRow({
             <div>
               <h3>
                 {it.href ? (
-                  <a className="title-link" href={it.href} target="_blank" rel="noreferrer" title="Открыть объявление на сайте">
+                  <a className="title-link" href={it.href} target="_blank" rel="noreferrer" title="Открыть страницу на сайте">
                     {it.title} ↗
                   </a>
                 ) : (
@@ -492,19 +497,21 @@ function ItemRow({
               )}
               {canReplace && !sight && replaceBtn}
               {(it.stay_role === "checkin" || it.stay_role === "checkin_late") && (
-                // жильё задаёт весь маршрут — меняем в вводных, и программа строится заново
+                // жильё задаёт весь маршрут (заезд, выезд, дорогу каждый день) — программа строится заново
                 <button
                   type="button"
-                  className="btn"
-                  title="Откроются вводные поездки на разделе «Где жить» — маршрут перестроится под новое жильё"
-                  onClick={() => navigate(`/?edit=${tripId}&focus=stay`)}
+                  className={`btn ${stayOpen ? "on" : ""}`}
+                  aria-expanded={stayOpen}
+                  title="Выберите другое жильё — программа построится заново, жильё запишется в вводные поездки"
+                  onClick={() => setStayOpen(!stayOpen)}
                 >
-                  ⇄ Изменить жильё
+                  ⇄ Заменить жильё
                 </button>
               )}
             </div>
           </div>
 
+          {stayOpen && <StayReplace input={input} tripId={tripId} current={it.place_id} />}
           {open && (
             <div className="alts">
               {it.kind === "food" && (
@@ -848,5 +855,69 @@ function MapCard({ day }: { day: Day }) {
         Весь день на транспорте ↗
       </a>
     </section>
+  );
+}
+
+
+type StayOption = Alternative & { kind: string };
+
+/** Замена жилья прямо в программе: варианты на даты поездки, как в разделе «Где жить» формы. Выбор строит программу
+ * заново (как «Изменить вводные → Построить заново»): новое жильё записывается в вводные, прежний вариант остаётся
+ * по своей ссылке. Своя бронь по ссылке или вручную — в вводных. */
+function StayReplace({ input, tripId, current }: { input: TripInput; tripId: string; current: string | null }) {
+  const [rows, setRows] = useState<StayOption[] | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const q = new URLSearchParams({
+      city: input.city, origin: input.origin, start_date: input.start_date, end_date: input.end_date,
+      adults: String(input.adults), kids: input.kids_ages.join(","), budget: String(input.budget), stay: "any",
+      wishes: input.wishes, tags: input.tags.join(","), transport: input.transport,
+      return_transport: input.return_transport || "", out_price: String(input.out_price || 0),
+      back_price: String(input.back_price || 0), start_time: input.start_time, arrive_time: input.arrive_time || "",
+    });
+    fetch(`/api/stays?${q}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { stays: StayOption[] }) => setRows(d.stays.filter((s) => s.id !== current))) // нынешнее жильё — не вариант
+      .catch(() => setError("Не удалось загрузить варианты жилья — попробуйте ещё раз или поменяйте жильё в вводных"));
+  }, [input, current]);
+
+  async function pick(a: StayOption) {
+    setBusy(true);
+    setError("");
+    try {
+      const trip = await api.createTrip({ ...input, stay_id: a.id, stay_url: "", stay_manual: null } as Partial<TripInput>);
+      navigate(`/trip/${trip.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="alts">
+      <p className="hint">
+        Выберите жильё — программа построится заново под него: заезд, выезд и дорога каждый день. Ручные правки программы
+        сбросятся, прежний вариант останется в «Моих поездках». Своя бронь по ссылке —{" "}
+        <a href={`/?edit=${tripId}&focus=stay`} onClick={(e) => (e.preventDefault(), navigate(`/?edit=${tripId}&focus=stay`))}>
+          в вводных
+        </a>
+        .
+      </p>
+      {error && <p className="hint warn">{error}</p>}
+      {busy && (
+        <p className="loading-line" role="status">
+          <span className="spinner" aria-hidden="true" /> Строим программу заново…
+        </p>
+      )}
+      {!rows && !error && (
+        <p className="loading-line" role="status">
+          <span className="spinner" aria-hidden="true" /> Подбираем жильё на ваши даты…
+        </p>
+      )}
+      {rows && !busy && (
+        <AltList items={rows} page={4} placeholder="Поиск по названию, например «Баумана» или «квартира»" onPick={(a) => pick(a as StayOption)} />
+      )}
+    </div>
   );
 }
