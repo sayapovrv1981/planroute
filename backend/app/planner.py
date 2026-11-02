@@ -538,6 +538,8 @@ def nearby_link(p: dict, what: str) -> str:
     return f"https://yandex.ru/maps/?ll={p['lon']},{p['lat']}&z=16&text={quote(what)}"
 
 
+AFISHA_CITY = {"Санкт-Петербург": "saint-petersburg", "Казань": "kazan", "Калининград": "kaliningrad",
+               "Краснодар": "krasnodar", "Нижний Новгород": "nizhny-novgorod", "Сочи": "sochi"}
 YANDEX_GEO_ID = {"Санкт-Петербург": 2, "Москва": 213, "Казань": 43, "Нижний Новгород": 47, "Калининград": 22}
 
 
@@ -729,7 +731,7 @@ def why_place(ctx: Ctx, p: dict) -> list[str]:
     return out
 
 
-def attraction_item(ctx: Ctx, p: dict) -> dict:
+def attraction_item(ctx: Ctx, p: dict, day: date | None = None) -> dict:
     kind = {"museum": "museum", "theatre": "theatre", "landmark": "sight", "daytrip": "daytrip",
             "excursion": "excursion", "event": "event"}.get(p["category"], "walk")
     cost_kind = "ticket" if place_cost(ctx, p) > 0 else "none"
@@ -737,6 +739,10 @@ def attraction_item(ctx: Ctx, p: dict) -> dict:
     dur = p["duration"] + (ctx.ti.sight_buffer_min if kind != "theatre" else 0)
     it = make_item(kind, p["name"], dur, place=p, note=p.get("note", ""),
                    fixed=fixed, cost_kind=cost_kind, estimate=place_cost(ctx, p), links=links_for(ctx, p))
+    slug = AFISHA_CITY.get(ctx.city)
+    if kind == "theatre" and day and slug:
+        it["links"].append({"label": "Афиша на эту дату — Яндекс Афиша",
+                            "url": f"https://afisha.yandex.ru/{slug}/theatre?date={day.isoformat()}"})
     it["far"] = p.get("far")
     it["why"] = why_place(ctx, p)
     return it
@@ -1338,7 +1344,7 @@ def build_day(ctx: Ctx, d: DayPlan, hotel: dict, used_food: set[str]) -> list[di
             dinner = add(food_item(ctx, f[0], "dinner", light=True))
             dinner["fixed_start"] = parse_hm(th["start"]) - dinner["duration"] - mins(f[0], th)  # к спектаклю, без ожидания
             used_food.add(f[0]["id"])
-        add(attraction_item(ctx, th))
+        add(attraction_item(ctx, th, d.date))
         point = th
     else:
         at = max(19 * 60 if rest_needed else 0, simulate_end(ctx, items) + 15)

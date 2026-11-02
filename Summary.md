@@ -97,3 +97,17 @@ Dockerfile, docker-compose.yml, .dockerignore   НОВОЕ — образ при
    Авито (sergiev_posad, pereslavl-zalesskiy, rostov), Островок (russia/sergiyev_posad, russia/pereslavl-zalesskiy,
    russia/rostov, russia/nizhniy_novgorod).
 5. Этап B: черновики карточек мест моделью, объяснение выбора мест, правка программы словами.
+
+## 6. Сессия 2026-11-02: развёртывание на Mac и афиша
+
+- Репозиторий склонирован в `/Users/ruslan_sayapov/planroute` (прежний путь `/Users/ruslan/planroute` в CLAUDE.md устарел).
+  Mac: macOS 13.4.1 Intel, Homebrew 3.2.17 устарел (каталог 2019 г.), Docker не встал бы (старая macOS).
+- Окружение поставлено установщиками, без Homebrew: Python 3.12 (python.org), Node 22 (nodejs.org). Отдельный
+  PostgreSQL не нужен: `manage.py devdb` сам скачивает бинарники. Python 3.12 не в PATH — запуск:
+  `PATH=/Library/Frameworks/Python.framework/Versions/3.12/bin:$PATH bash scripts/run.sh`.
+- `scripts/setup.sh` отработал; тесты: 148, не проходит только `test_infra` (не установился `moto`, нужен лишь для S3).
+- `backend/.env` с рабочими ключами положен пользователем; сервер на http://localhost:8000.
+- Замечания пользователь пишет в `tasks.md` — смотреть его в начале работы.
+- Сделано: у театра в программе ссылка «Афиша на эту дату — Яндекс Афиша»
+  (`afisha.yandex.ru/<город>/theatre?date=…`, `AFISHA_CITY` в `planner.py`; для Выборга ссылки нет).
+- Открыто: Тикетленд — ждём регистрации пользователя на affiliates.ticketland.ru и данных из кабинета.
